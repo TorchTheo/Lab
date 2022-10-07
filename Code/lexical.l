@@ -2,10 +2,10 @@
 %{
     #include "syntax.tab.h"
     int yycolumn = 1;
-    #define YY_USER_ACTION \ 
-        yylloc.first_line = yylloc.last_line = yylineno; \ 
-        yylloc.first_column = yycolumn; \ 
-        yylloc.last_column = yycolumn + yyleng - 1; \ 
+    #define YY_USER_ACTION \
+        yylloc.first_line = yylloc.last_line = yylineno; \
+        yylloc.first_column = yycolumn; \
+        yylloc.last_column = yycolumn + yyleng - 1; \
         yycolumn += yyleng;
     int error = 0;
 %}
@@ -17,134 +17,134 @@ float ({digit}*\.?{digit}+|{digit}+\.)([eE][+-]?{u_int})?
 id {letter}({letter}|{digit})*
 %%
 [ \t] {}
-[\n\r] { 
-            yycolumn = 1; 
+[\n\r] {
+            yycolumn = 1;
             // printf("%d ", yylineno);
         }
-"+" { 
+"+" {
     // printf("+ ");
     yylval.node = new_node("PLUS", T_TERMINAL, yytext);
-    return PLUS; 
+    return PLUS;
 }
-"-" { 
+"-" {
     // printf("- ");
     yylval.node = new_node("MINUS", T_TERMINAL, yytext);
-    return MINUS; 
+    return MINUS;
 }
-"int"|"float" { 
+"int"|"float" {
     // printf("TYPE ");
     yylval.node = new_node("TYPE", T_TYPE, yytext);
-    return TYPE; 
+    return TYPE;
 }
-";" { 
+";" {
     // printf("SEMI ");
     yylval.node = new_node("SEMI", T_TERMINAL, yytext);
-    return SEMI; 
+    return SEMI;
 }
-"," { 
+"," {
     // printf("COMMA ");
     yylval.node = new_node("COMMA", T_TERMINAL, yytext);
-    return COMMA; 
+    return COMMA;
 }
-"=" { 
+"=" {
     // printf("ASSIGNOP ");
     yylval.node = new_node("ASSIGNOP", T_TERMINAL, yytext);
-    return ASSIGNOP; 
+    return ASSIGNOP;
 }
-">"|"<"|">="|"<="|"=="|"!=" { 
+">"|"<"|">="|"<="|"=="|"!=" {
     // printf("RELOP ");
     yylval.node = new_node("RELOP", T_TERMINAL, yytext);
-    return RELOP; 
+    return RELOP;
 }
-"*" { 
+"*" {
     // printf("STAR ");
     yylval.node = new_node("STAR", T_TERMINAL, yytext);
-    return STAR; 
+    return STAR;
 }
-"/" { 
+"/" {
     // printf("DIV ");
     yylval.node = new_node("DIV", T_TERMINAL, yytext);
-    return DIV; 
+    return DIV;
 }
-"&&" { 
+"&&" {
     // printf("AND ");
     yylval.node = new_node("AND", T_TERMINAL, yytext);
-    return AND; 
+    return AND;
 }
-"||" { 
+"||" {
     // printf("OR ");
     yylval.node = new_node("OR", T_TERMINAL, yytext);
-    return OR; 
+    return OR;
 }
-"." { 
+"." {
     // printf("DOT ");
     yylval.node = new_node("DOT", T_TERMINAL, yytext);
-    return DOT; 
+    return DOT;
 }
-"!" { 
+"!" {
     // printf("NOT ");
     yylval.node = new_node("NOT", T_TERMINAL, yytext);
-    return NOT; 
+    return NOT;
 }
-"(" { 
+"(" {
     // printf("LP ");
     yylval.node = new_node("LP", T_TERMINAL, yytext);
-    return LP; 
+    return LP;
 }
-")" { 
+")" {
     // printf("RP ");
     yylval.node = new_node("RP", T_TERMINAL, yytext);
-    return RP; 
+    return RP;
 }
-"[" { 
+"[" {
     // printf("LB ");
     yylval.node = new_node("LP", T_TERMINAL, yytext);
-    return LB; 
+    return LB;
 }
-"]" { 
+"]" {
     // printf("RB ");
     yylval.node = new_node("RB", T_TERMINAL, yytext);
-    return RB; 
+    return RB;
 }
-"{" { 
+"{" {
     // printf("LC ");
     yylval.node = new_node("LC", T_TERMINAL, yytext);
-    return LC; 
+    return LC;
 }
-"}" { 
+"}" {
     // printf("RC ");
     yylval.node = new_node("RC", T_TERMINAL, yytext);
-    return RC; 
+    return RC;
 }
-"struct" { 
+"struct" {
     // printf("STRUCT ");
     yylval.node = new_node("STRUCT", T_TERMINAL, yytext);
-    return STRUCT; 
+    return STRUCT;
 }
-"return" { 
+"return" {
     // printf("RETURN ");
     yylval.node = new_node("RETURN", T_TERMINAL, yytext);
-    return RETURN; 
+    return RETURN;
 }
-"if" { 
+"if" {
     // printf("IF ");
     yylval.node = new_node("IF", T_TERMINAL, yytext);
-    return IF; 
+    return IF;
 }
-"else" { 
+"else" {
     // printf("ELSE ");
     yylval.node = new_node("ELSE", T_TERMINAL, yytext);
-    return ELSE; 
+    return ELSE;
 }
-"while" { 
+"while" {
     // printf("WHILE ");
     yylval.node = new_node("WHILE", T_TERMINAL, yytext);
-    return WHILE; 
+    return WHILE;
 }
 {u_int} { // Decimal
     // printf("INT ");
-    yylval.node = new_node("DEC", T_INT, yytext); 
-    return INT; 
+    yylval.node = new_node("DEC", T_INT, yytext);
+    return INT;
 }
 0(0|([1-7][0-7]*)) { // Octal
     yylval.node = new_node("OCT", T_INT, yytext);
@@ -166,10 +166,10 @@ id {letter}({letter}|{digit})*
     yylval.node = new_node("HEX", T_INT, yytext);
     return INT;
 }
-{float} { 
+{float} {
     // printf("FLOAT ");
     yylval.node = new_node("FLOAT", T_FLOAT, yytext);
-    return FLOAT; 
+    return FLOAT;
 }
 ({digit}*\.?{digit}+|{digit}+\.)[eE] {
     printf("Error type A at line %d: Illegal FLOAT number \"%s\".\n", yylineno, yytext);
@@ -177,12 +177,12 @@ id {letter}({letter}|{digit})*
     yylval.node = new_node("FLOAT", T_FLOAT, yytext);
     return FLOAT;
 }
-{id} { 
+{id} {
     // printf("ID ");
     yylval.node = new_node("ID", T_ID, yytext);
-    return ID; 
+    return ID;
 }
 . {
-    printf("Error type A at Line %d: Unknown character \"%s\"\n", yylineno, yytext); 
+    printf("Error type A at Line %d: Unknown character \"%s\"\n", yylineno, yytext);
     error = 1;
 }

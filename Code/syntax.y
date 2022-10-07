@@ -1,4 +1,5 @@
 %locations
+%define parse.error verbose
 %{
     #include <stdio.h>
     #include <stdlib.h>
@@ -6,12 +7,14 @@
     #include <string.h>
     #include "include/node.h"
     typedef unsigned char uint8_t;
+    extern int error;
     
 
     Node *new_node(char*, SymbolType, ...);
     void print(Node*, int);
 
     int yylex();
+    int yyerror(const char *msg);
 
     Node *root;
 %}
@@ -67,6 +70,14 @@ ExtDef              : Specifier ExtDecList SEMI { // some global var; e.g.int gl
                         $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                         // printf("ExtDef -> Specifier FunDec CompSt\n"); 
                     }
+                    | Specifier ExtDecList error {
+                        yyerror("Probably missing \";\" at this line or last line");
+                        yyerrok;
+                    }
+                    | Specifier error {
+                        yyerror("Invalid definition");
+                        yyerrok;
+                    }
 ExtDecList          : VarDec { 
                         $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 1, $1);
                         // printf("ExtDecList -> VarDec\n"); 
@@ -74,6 +85,14 @@ ExtDecList          : VarDec {
                     | VarDec COMMA ExtDecList { 
                         $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                         // printf("ExtDecList -> VarDec COMMA ExtDecList\n"); 
+                    }
+                    | VarDec error ExtDecList {
+                        yyerror("Missing \",\" between variables");
+                        yyerrok;
+                    } 
+                    | VarDec error {
+                        yyerror("Probably missing ';' at this line or last line");
+                        yyerrok;
                     }
 /* Specifiers */
 Specifier           : TYPE { 
@@ -91,6 +110,10 @@ StructSpecifier     : STRUCT OptTag LC DefList RC {
                     | STRUCT Tag {
                         $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 2, $1, $2);
                         // printf("StructSpecifier -> STRUCT Tag\n"); 
+                    } 
+                    | STRUCT OptTag LC error RC {
+                        yyerror("Invalid struct definition");
+                        yyerrok;
                     }
 OptTag              : ID {
                         $$ = new_node("OptTag", T_NTERMINAL, @1.first_line, 1, $1);
@@ -112,6 +135,14 @@ VarDec              : ID {
                         $$ = new_node("VarDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
                         // printf("VarDec -> VarDec? LB INT RB\n");
                     }
+                    | VarDec LB error RB {
+                        yyerror("Invalid size of array");
+                        yyerrok;
+                    }
+                    | VarDec LB error {
+                        yyerror("Missing ']' after a '['");
+                        yyerrok;
+                    }
 FunDec              : ID LP VarList RP {
                         $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
                         // printf("FunDec -> ID LP VarList RP\n");
@@ -119,6 +150,14 @@ FunDec              : ID LP VarList RP {
                     | ID LP RP {
                         $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                         // printf("FunDec -> ID LP RP\n");
+                    }
+                    | ID LP error RP {
+                        yyerror("Invalid parameters of function");
+                        yyerrok;
+                    }
+                    | ID LP error {
+                        yyerror("Missing ')' after parameters");
+                        yyerrok;
                     }
 VarList             : ParamDec COMMA VarList {
                         $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
@@ -128,6 +167,14 @@ VarList             : ParamDec COMMA VarList {
                         $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 1, $1);
                         // printf("VarList -> ParamDec\n");
                     }
+                    | ParamDec error VarList {
+                        yyerror("Missing ',' between parameters");
+                        yyerrok;
+                    }
+                    | ParamDec error {
+                        yyerror("Invalid parameters");
+                        yyerrok;
+                    }
 ParamDec            : Specifier VarDec {
                         $$ = new_node("ParamDec", T_NTERMINAL, @1.first_line, 2, $1, $2);
                         // printf("ParamDec -> Specifier VarDec\n");
@@ -136,6 +183,10 @@ ParamDec            : Specifier VarDec {
 CompSt              : LC DefList StmtList RC {
                         $$ = new_node("CompSt", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
                         // printf("CompSt -> LC DefList StmtList RC\n");
+                    }
+                    | error RC {
+                        yyerror("Invalid statements");
+                        yyerrok;
                     }
 StmtList            : Stmt StmtList {
                         $$ = new_node("StmtList", T_NTERMINAL, @1.first_line, 2, $1, $2);
@@ -163,6 +214,46 @@ Stmt                : Exp SEMI {
                     | WHILE LP Exp RP Stmt {
                         $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
                     }
+                    | Exp error {
+                        yyerror("Probably missing ';' at this line or last line");
+                        yyerrok;
+                    }
+                    | error SEMI {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | RETURN error SEMI {
+                        yyerror("Invalid return value");
+                        yyerrok;
+                    }
+                    | RETURN Exp error {
+                        yyerror("Probably missing ';' at this line or last line");
+                        yyerrok;
+                    }
+                    | IF LP error RP Stmt {
+                        yyerror("Illegal condition");
+                        yyerrok;
+                    }
+                    | IF LP error RP Stmt ELSE Stmt {
+                        yyerror("Illegal condition");
+                        yyerrok;
+                    }
+                    | WHILE LP error RP Stmt {
+                        yyerror("Illegal condition");
+                        yyerrok;
+                    }
+                    | IF LP Exp error Stmt {
+                        yyerror("Missing ')' after a '('");
+                        yyerrok;
+                    }
+                    | IF LP Exp error Stmt ELSE Stmt {
+                        yyerror("Missing ')' after a '('");
+                        yyerrok;
+                    }
+                    | WHILE LP Exp error Stmt {
+                        yyerror("Missing ')' after a '('");
+                        yyerrok;
+                    }
 /* Local Definitions */
 DefList             : Def DefList {
                         $$ = new_node("DefList", T_NTERMINAL, @1.first_line, 2, $1, $2);
@@ -173,17 +264,37 @@ DefList             : Def DefList {
 Def                 : Specifier DecList SEMI {
                         $$ = new_node("DefList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                     }
+                    | Specifier DecList error {
+                        yyerror("Probably missing ';' at this line or last line");
+                        yyerrok;
+                    }
+                    | Specifier error SEMI {
+                        yyerror("Invalid definition");
+                        yyerrok;
+                    }
 DecList             : Dec {
                         $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 1, $1);
                     }
                     | Dec COMMA DecList {
                         $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                     }
+                    | Dec error DecList {
+                        yyerror("Missing ',' between variables");
+                        yyerrok;
+                    }
+                    | Dec error {
+                        yyerror("Probably missing ';' at this line or last line");
+                        yyerrok;
+                    }
 Dec                 : VarDec {
                         $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 1, $1);
                     }
                     | VarDec ASSIGNOP Exp {
                         $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    }
+                    | VarDec ASSIGNOP error {
+                        yyerror("Invalid value");
+                        yyerrok;
                     }
 /* Expressions */
 Exp                 : Exp ASSIGNOP Exp {
@@ -238,11 +349,71 @@ Exp                 : Exp ASSIGNOP Exp {
                     | FLOAT {
                         $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
                     }
+                    | Exp ASSIGNOP error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp AND error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp OR error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp RELOP error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp PLUS error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp MINUS error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp STAR error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | Exp DIV error {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | LP error {
+                        yyerror("Missing ')' after a '('");
+                        yyerrok;
+                    }
+                    | error RP {
+                        yyerror("Invalid expression");
+                        yyerrok;
+                    }
+                    | ID LP error RP {
+                        yyerror("Invalid arguments of function call");
+                        yyerrok;
+                    }
+                    | ID LP error SEMI {
+                        yyerror("Missing ')' after a '('");
+                        yyerrok;
+                    }
+                    | Exp LB error RB {
+                        yyerror("Invalid index of element");
+                        yyerrok;
+                    }
+                    | Exp LB error SEMI {
+                        yyerror("Missing ']' after a '['");
+                        yyerrok;
+                    }
 Args                : Exp COMMA Args {
                         $$ = new_node("Args", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                     }
                     | Exp {
                         $$ = new_node("Args", T_NTERMINAL, @1.first_line, 1, $1);
+                    }
+                    | Exp error Args {
+                        yyerror("Missing ',' between arguments");
+                        yyerrok;
                     }
 %%
 
@@ -335,4 +506,14 @@ void print_AST(Node *node, int depth) {
     if(node->next != NULL) {
         print_AST(node->next, depth);
     }
+}
+
+int yyerror(const char *msg) {
+    error = 1;
+    if (msg[0] == 's' && msg[1] == 'y') {
+        printf("Error type B at Line %d: %s.", yylineno, msg);
+    }
+    else
+        printf(" %s.\n", msg);
+    return 0;
 }

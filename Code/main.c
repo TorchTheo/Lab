@@ -13,6 +13,6 @@ int main(int argc, char **argv) {
     yyrestart(f);
     yyparse();
     if(!error)
-        print_AST(root, 1);
+        print_AST(root, 0);
     return 0;
 }
