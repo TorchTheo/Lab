@@ -1,9 +1,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 extern FILE* yyin;
-extern int int_num;
-extern int float_num;
-extern int id_num;
+extern int error;
+extern struct Node *root;
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
     FILE *f = fopen(argv[1], "r");
@@ -13,5 +12,7 @@ int main(int argc, char **argv) {
     }
     yyrestart(f);
     yyparse();
+    if(!error)
+        print_AST(root, 1);
     return 0;
 }

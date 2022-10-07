@@ -4,39 +4,21 @@
     #include <stdlib.h>
     #include <stdarg.h>
     #include <string.h>
-    #include "lex.yy.c"
+    #include "include/node.h"
     typedef unsigned char uint8_t;
-    typedef enum {
-        T_INT,
-        T_FLOAT,
-        T_ID,
-        T_TYPE,
-        T_RELOP,
-        T_TERMINAL,
-        T_NTERMINAL,
-        T_NULL
-    } SymbolType;
-    typedef struct Node Node;
-    typedef struct Node{
-        char *name;
-        SymbolType type;
-        int line;
-        union {
-            int         type_int;
-            float       type_float;
-            char        type_str[40];
-        } val;
-        Node *sons;
-        Node *next;
-    };
+    
 
-    Node *newNode(char*, SymbolType, ...);
+    Node *new_node(char*, SymbolType, ...);
     void print(Node*, int);
 
     int yylex();
 
     Node *root;
 %}
+
+%union {
+    Node *node;
+}
 
 %right <node> ASSIGNOP
 %left  <node> OR
@@ -264,6 +246,7 @@ Args                : Exp COMMA Args {
                     }
 %%
 
+#include "lex.yy.c"
 Node *new_node(char *_name, SymbolType _type, ...) {
     va_list list;
     Node *node = calloc(1, sizeof(Node));
@@ -311,4 +294,45 @@ Node *new_node(char *_name, SymbolType _type, ...) {
     }
     va_end(list);
     return node;
+}
+
+void print_AST(Node *node, int depth) {
+    if (node->type != T_NULL)
+        for(int i = 0; i < depth; i++)
+            printf("  ");
+    switch (node->type) {
+        case T_INT: {
+            printf("INT: %d\n", node->val.type_int);
+            break;
+        }
+        case T_FLOAT: {
+            printf("FLOAT: %f\n", node->val.type_float);
+            break;
+        }
+        case T_ID: case T_TYPE: {
+            printf("%s: %s\n", node->name, node->val.type_str);
+            break;
+        }
+        case T_RELOP: case T_TERMINAL: {
+            printf("%s\n", node->name);
+            break;
+        }
+        case T_NTERMINAL: {
+            printf("%s (%d)\n", node->name, node->line);
+            break;
+        }
+        case T_NULL: {
+            break;
+        }
+        default: {
+            printf("Error type: %s\n", node->name);
+            break;
+        }
+    }
+    if(node->sons != NULL) {
+        print_AST(node->sons, depth + 1);
+    }
+    if(node->next != NULL) {
+        print_AST(node->next, depth);
+    }
 }
