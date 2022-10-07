@@ -12,7 +12,7 @@
 
 digit [0-9]
 letter [_a-zA-Z]
-u_int {digit}+
+u_int 0|([1-9]{digit}*)
 float ({digit}*\.?{digit}+|{digit}+\.)([eE][+-]?{u_int})?
 id {letter}({letter}|{digit})*
 %%
@@ -146,11 +146,23 @@ id {letter}({letter}|{digit})*
     yylval.node = new_node("DEC", T_INT, yytext); 
     return INT; 
 }
-0[0-7]+ { // Octal
+0(0|([1-7][0-7]*)) { // Octal
     yylval.node = new_node("OCT", T_INT, yytext);
     return INT;
 }
-0[xX]([1-9a-fA-F]+) { // Hexadecimal
+0{u_int} {
+    printf("Error type A at Line %d: Illegal OCT number \"%s\".\n", yylineno, yytext);
+    error = 1;
+    yylval.node = new_node("OCT", T_INT, yytext);
+    return INT;
+}
+0[xX](0|([1-9a-fA-F][0-9a-fA-F]*)) { // Hexadecimal
+    yylval.node = new_node("HEX", T_INT, yytext);
+    return INT;
+}
+0[xX](0[0-9A-Za-z]*|([1-9A-Za-z]({digit}|[A-Za-z])*)) {
+    printf("Error type A at Line %d: Illegal HEX number \"%s\".\n", yylineno, yytext);
+    error = 1;
     yylval.node = new_node("HEX", T_INT, yytext);
     return INT;
 }
@@ -158,6 +170,12 @@ id {letter}({letter}|{digit})*
     // printf("FLOAT ");
     yylval.node = new_node("FLOAT", T_FLOAT, yytext);
     return FLOAT; 
+}
+({digit}*\.?{digit}+|{digit}+\.)[eE] {
+    printf("Error type A at line %d: Illegal FLOAT number \"%s\".\n", yylineno, yytext);
+    error = 1;
+    yylval.node = new_node("FLOAT", T_FLOAT, yytext);
+    return FLOAT;
 }
 {id} { 
     // printf("ID ");
