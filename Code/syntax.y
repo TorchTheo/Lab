@@ -262,7 +262,7 @@ DefList             : Def DefList {
                         $$ = new_node("DefList", T_NULL);
                     }
 Def                 : Specifier DecList SEMI {
-                        $$ = new_node("DefList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                        $$ = new_node("Def", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                     }
                     | Specifier DecList error {
                         yyerror("Probably missing ';' at this line or last line");
@@ -333,7 +333,9 @@ Exp                 : Exp ASSIGNOP Exp {
                     | ID LP Args RP {
                         $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
                     }
-                    | ID LP RP {}
+                    | ID LP RP {
+                        $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    }
                     | Exp LB Exp RB {
                         $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
                     }

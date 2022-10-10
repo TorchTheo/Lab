@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include "include/node.h"
 extern FILE* yyin;
 extern int error;
 extern struct Node *root;
+int yyparse();
+int yyrestart(FILE *);
+void print_AST(Node *, int);
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
     FILE *f = fopen(argv[1], "r");
