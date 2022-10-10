@@ -98,7 +98,7 @@ id {letter}({letter}|{digit})*
 }
 "[" {
     // printf("LB ");
-    yylval.node = new_node("LP", T_TERMINAL, yytext);
+    yylval.node = new_node("LB", T_TERMINAL, yytext);
     return LB;
 }
 "]" {
@@ -156,7 +156,7 @@ id {letter}({letter}|{digit})*
     yylval.node = new_node("OCT", T_INT, yytext);
     return INT;
 }
-0[xX](0|([1-9a-fA-F][0-9a-fA-F]*)) { // Hexadecimal
+0[xX](0|([0-9a-fA-F][0-9a-fA-F]*)) { // Hexadecimal
     yylval.node = new_node("HEX", T_INT, yytext);
     return INT;
 }
@@ -183,18 +183,33 @@ id {letter}({letter}|{digit})*
     return ID;
 }
 "//".* {
-    /* line comment */
+    /* Do nothing. */
 }
-"/*"(\n|.)*"/*"(\n|.)*"*/"(\n|.)*"*/" {
-    printf("Error type B at Line %d: Illegal nested comment.\n", yylineno);
-    error = 1;
-}
-"/*"(\n|.)*"*/"(\n|.)*"*/" {
-    printf("Error type B at Line %d: Illegal comment.\n", yylineno);
-    error = 1;
-}
-"/*"(\n|.)*"*/" {
-    /* block comment */
+"/*" {
+    int l = yylineno;
+    for(char c = input(); c != EOF; c = input()) {
+        if(c == '/') {
+            char c_ = input();
+            if(c_ == '*') {
+                printf("Error type B at line %d: Illegal nested comment.\n", l);
+                error = 1;
+                break;
+            } else 
+                unput(c_);
+        } else if(c == '*') {
+            char c_ = input();
+            if(c_ == '/') {
+                break;
+            } else 
+                unput(c_);
+        }
+        if(c == '\n')
+            l++;
+    }
+    if(input() == EOF) {
+        printf("Error type B at line %d: EOF in comment.\n", yylineno);
+        error = 1;
+    }
 }
 . {
     printf("Error type A at Line %d: Unknown character \"%s\"\n", yylineno, yytext);
