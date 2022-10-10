@@ -182,6 +182,20 @@ id {letter}({letter}|{digit})*
     yylval.node = new_node("ID", T_ID, yytext);
     return ID;
 }
+"//".* {
+    /* line comment */
+}
+"/*"(\n|.)*"/*"(\n|.)*"*/"(\n|.)*"*/" {
+    printf("Error type B at Line %d: Illegal nested comment.\n", yylineno);
+    error = 1;
+}
+"/*"(\n|.)*"*/"(\n|.)*"*/" {
+    printf("Error type B at Line %d: Illegal comment.\n", yylineno);
+    error = 1;
+}
+"/*"(\n|.)*"*/" {
+    /* block comment */
+}
 . {
     printf("Error type A at Line %d: Unknown character \"%s\"\n", yylineno, yytext);
     error = 1;
