@@ -35,7 +35,7 @@ syntax-c: $(YFILE)
 -include $(patsubst %.o, %.d, $(OBJS))
 
 # 定义的一些伪目标
-.PHONY: clean test
+.PHONY: clean test git
 test: 
 	$(foreach tst, $(TESTS), ./parser $(tst) > $(tst:.cmm=.o);)
 	
@@ -45,3 +45,6 @@ clean:
 	rm -f $(LFC) $(YFC) $(YFC:.c=.h)
 	rm -f *~
 	rm -f ../Test/*.o
+
+git:
+	git add ../.; git commit -a -m $(MSG)

@@ -1,9 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include "include/node.h"
+#include "include/type.h"
 extern FILE* yyin;
 extern int error;
-extern struct Node *root;
+extern Node *root;
 int yyparse();
 int yyrestart(FILE *);
 void print_AST(Node *, int);

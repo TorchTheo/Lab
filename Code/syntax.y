@@ -5,7 +5,7 @@
     #include <stdlib.h>
     #include <stdarg.h>
     #include <string.h>
-    #include "include/node.h"
+    #include "include/type.h"
     typedef unsigned char uint8_t;
     extern int error;
     
