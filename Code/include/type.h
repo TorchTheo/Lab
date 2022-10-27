@@ -1,5 +1,5 @@
 typedef unsigned int uint32_t;
-
+#define SIZEOF(x) sizeof(struct x)
 typedef enum {
     T_INT,
     T_FLOAT,
@@ -37,7 +37,7 @@ typedef struct SymbolList_* SymbolList;
 struct Type_ {
     enum {BASIC, ARRAY, STRUCTURE, FUNCTION} kind;
     union {
-        int basic; // 基本类型
+        enum {TYPE_INT, TYPE_FLOAT} basic; // 基本类型
         struct {Type elem; int size;} array; // 数组
         FieldList structure; // 结构体
         Func func;
@@ -69,4 +69,7 @@ struct SymbolList_ {
     SymbolList tb_next; // 符号表中的下一个
     SymbolList tb_prev; // 符号表的上一个
     SymbolList fs_next; // 同一层的下一个
+    int line; // 位置
+    int dep; // 第几层
+    uint32_t key; // 在表中的key
 };

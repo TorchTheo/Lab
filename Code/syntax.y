@@ -47,23 +47,28 @@
 %%
 /* High-level Definitions */
 Program         : ExtDefList {
-                    root = new_node("Program", T_NTERMINAL, @1.first_line, 1, $1);
+                    // root = new_node("Program", T_NTERMINAL, @1.first_line, 1, $1);
+                    root = $1;
                 }
                 ;
 ExtDefList      : ExtDef ExtDefList {
-                    $$ = new_node("ExtDefList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("ExtDefList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = $1; $1->next = $2;
                 }
                 | /* Empty */ {
-                    $$ = new_node("ExtDefList", T_NULL);
+                    // $$ = new_node("ExtDefList", T_NULL);
+                    $$ = NULL;
                 }
                 ;
 ExtDef          : Specifier ExtDecList SEMI {
                     // Global variable
-                    $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 2, $1, $2);
                 }
                 | Specifier SEMI {
                     // Structure
-                    $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | Specifier FunDec CompSt {
                     // Function
@@ -79,10 +84,12 @@ ExtDef          : Specifier ExtDecList SEMI {
                 }
                 ;
 ExtDecList      : VarDec {
-                    $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | VarDec COMMA ExtDecList {
-                    $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("ExtDecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $1; $1->next = $3;
                 }
                 | VarDec error ExtDecList {
                     yyerror("Missing ',' between variables");
@@ -95,10 +102,12 @@ ExtDecList      : VarDec {
                 ;
 /* Specifier */
 Specifier       : TYPE {
-                    $$ = new_node("Specifier", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Specifier", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | StructSpecifier {
-                    $$ = new_node("Specifier", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Specifier", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 ;
 StructSpecifier : STRUCT OptTag LC DefList RC {
