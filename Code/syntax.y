@@ -207,7 +207,8 @@ StmtList        : Stmt StmtList {
                     $$ = $1; $1->next = $2;
                 }
                 | /* Empty */ {
-                    $$ = new_node("StmtList", T_NULL);
+                    // $$ = new_node("StmtList", T_NULL);
+                    $$ = NULL;
                 }
                 ;
 Stmt            : Exp SEMI {
@@ -275,7 +276,8 @@ DefList         : Def DefList {
                     $$ = $1; $1->next = $2;
                 }
                 | /* Empty */ {
-                    $$ = new_node("DefList", T_NULL);
+                    // $$ = new_node("DefList", T_NULL);
+                    $$ = NULL;
                 }
                 ;
 Def             : Specifier DecList SEMI {
@@ -297,7 +299,11 @@ DecList         : Dec {
                 }
                 | Dec COMMA DecList {
                     // $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
-                    $$ = $1; $1->next = $3;
+                    $$ = $1;
+                    if($1->next != NULL) 
+                        $1->next->next = $3;
+                    else
+                        $1->next = $3;
                 }
                 | Dec error DecList {
                     yyerror("Missing ',' between variables");
@@ -323,58 +329,99 @@ Dec             : VarDec {
                 ;
 /* Expressions */
 Exp             : Exp ASSIGNOP Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp AND Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp OR Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp RELOP Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp PLUS Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp MINUS Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp STAR Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp DIV Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | LP Exp RP {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
                 }
                 | MINUS Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = $1; $1->sons = $2;
                 }
                 | NOT Exp {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = $1; $1->sons = $2;
                 }
                 | ID LP Args RP {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | ID LP RP {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
                 }
                 | Exp LB Exp RB {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | Exp DOT ID {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $2;
+                    $2->sons = $1;
+                    $1->next = $3;
                 }
                 | ID {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | INT  {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | FLOAT  {
-                    $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | Exp ASSIGNOP error {
                     yyerror("Invalid expression");
@@ -433,10 +480,13 @@ Exp             : Exp ASSIGNOP Exp {
                     yyerrok;
                 }
 Args            : Exp COMMA Args {
-                    $$ = new_node("Args", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Args", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $1;
+                    $1->next = $3;
                 }
                 | Exp {
-                    $$ = new_node("Args", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Args", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | Exp error Args {
                     yyerror("Missing ',' between arguments");

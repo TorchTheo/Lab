@@ -12,6 +12,7 @@ void popStack();
 void initTable();
 Type getSpeciferType(Node*); // 从Specifier中获取类型
 Type getVarDecType(Node*, Node*, char**); // 从VarDec中获得类型
+Type getExpType(Node*); // 得到Exp对应的类型
 boolean typeComp(Type, Type); // 比较是否结构相同
 void insertSymbol(char*, Type, uint32_t, int); // 将符号插入表中
 void processDef(Node*); 
@@ -26,7 +27,7 @@ uint32_t hash(char *name) {
     uint32_t val = 0, i;
     for(; *name; ++name) {
         val = (val << 2) + *name;
-        if(i = val & ~HASH_TABLE_SIZE)
+        if(i = val & ~(HASH_TABLE_SIZE - 1))
             val = (val ^ (i >> 12)) & HASH_TABLE_SIZE;
     }
     return val;
@@ -55,6 +56,8 @@ void popStack() {
     }
 
     // debug info
+    for(int i = 0; i < stack_top; i++)
+        printf("    ");
     printf("Frame %d:\n", stack_top);
     for(SymbolList head = frame_stack[stack_top]->fs_next; head != NULL; head = head->fs_next) {
         if(head->func_type == DEC && head->type->kind == FUNCTION) {
@@ -70,6 +73,8 @@ void popStack() {
                 // return;
             }
         }
+        for(int i = 0; i < stack_top + 1; i++)
+            printf("    ");
         printf("%s: %s\n", type2str(head->type), head->name);
     }
     printf("\n");
@@ -117,10 +122,43 @@ Type getVarDecType(Node* specifier, Node* var_dec, char **name) {
     return t;
 }
 
+Type getExpType(Node* exp) {
+    if(exp == NULL)
+        return NULL;
+    if(exp->type == T_INT) {
+        Type t = malloc(SIZEOF(Type_));
+        t->kind = BASIC;
+        t->u.basic = TYPE_INT;
+        return t;
+    }
+    if(exp->type == T_FLOAT) {
+        Type t = malloc(SIZEOF(Type_));
+        t->kind = BASIC;
+        t->u.basic = TYPE_FLOAT;
+        return t;
+    }
+    if(!strcmp(exp->name, "PLUS") || !strcmp(exp->name, "MINUS") || !strcmp(exp->name, "STAR") || !strcmp(exp->name, "DIV")) {
+        Type op[2];
+        op[0] = getExpType(exp->sons);
+        op[1] = getExpType(exp->sons->next);
+        if(op[1] == NULL) {
+            return op[0];
+        }
+        if(!typeComp(op[1], op[2]) || op[0]->kind != BASIC) {
+            printf("类型不匹配: %d\n", exp->line);
+        }
+        return op[0];
+    }
+}
+
 boolean typeComp(Type a, Type b) {
+    if(a == NULL || b == NULL)
+        return FALSE;
     if(a->kind != b->kind)
         return FALSE;
     switch(a->kind) {
+        case BASIC:
+            return a->u.basic == b->u.basic;
         case ARRAY:
             if(a->u.array.size != b->u.array.size)
                 return FALSE;
@@ -226,19 +264,28 @@ void processDef(Node* node) {
             t->u.func->ret = getSpeciferType(specifier);
             Param *tail = &(t->u.func->parameters);
 
+            if(dec->next != NULL) { // 函数定义开新栈
+                pushStack();
+            } 
+
             for(; params != NULL; params = params->next) {
                 Node *param_specifier = params->sons, *param = param_specifier->next, *param_vardec = param->sons;
                 char *name;
                 (*tail) = malloc(SIZEOF(Param_));
                 (*tail)->type = getVarDecType(param_specifier, param_vardec, &name);
                 (*tail)->name = name;
+                if(dec->next != NULL) 
+                    insertSymbol(name, (*tail)->type, VARDEC, param_vardec->line);
                 tail = &((*tail)->next);
             }
 
             if(dec->next == NULL) {
                 insertSymbol(id->val.type_str, t, FUNCDEC, dec->line);
             } else {
+                Node *def_list = dec->next->sons, *stmt_list = def_list->next;
+                stack_top--;
                 insertSymbol(id->val.type_str, t, FUNCDEF, dec->line);
+                analyse(def_list);
             }
         } else {
             for (; dec != NULL; dec = dec->next) {
@@ -247,6 +294,10 @@ void processDef(Node* node) {
                     char *name;
                     Type t = getVarDecType(specifier, var_dec, &name);
                     insertSymbol(name, t, VARDEC, var_dec->line);
+                } else {
+                    Type t = getExpType(dec);
+                    if(typeComp(t, frame_stack[stack_top]->type))
+                        printf("类型不匹配: %d\n", dec->line);
                 }
             }
         }
@@ -261,6 +312,13 @@ void analyse(Node* root) {
         if(!strcmp(root->name, "ExtDef"))
             for(; root != NULL; root = root->next)
                 processDef(root->sons);
+        else if(!strcmp(root->name, "DefList")) {
+            for(Node* def = root->sons; def != NULL; def = def->next)
+                processDef(def->sons);
+            if(root->next != NULL) {
+                // TODO: 处理Stmtlist
+            }
+        }
     }
     popStack();
 }
