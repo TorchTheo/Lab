@@ -390,20 +390,15 @@ Exp             : Exp ASSIGNOP Exp {
                 }
                 | ID LP Args RP {
                     // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
-                    $$ = $2;
-                    $2->sons = $1;
-                    $1->next = $3;
+                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 2, $1, $3);
                 }
                 | ID LP RP {
                     // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
-                    $$ = $2;
-                    $2->sons = $1;
+                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | Exp LB Exp RB {
                     // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
-                    $$ = $2;
-                    $2->sons = $1;
-                    $1->next = $3;
+                    $$ = new_node("ArrayEval", T_NTERMINAL, @1.first_line, 2, $1, $3);
                 }
                 | Exp DOT ID {
                     // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);

@@ -13,11 +13,12 @@ void initTable();
 Type getSpeciferType(Node*); // 从Specifier中获取类型
 Type getVarDecType(Node*, Node*, char**); // 从VarDec中获得类型
 Type getExpType(Node*); // 得到Exp对应的类型
+Type copyType(Type);
 boolean typeComp(Type, Type); // 比较是否结构相同
 void insertSymbol(char*, Type, uint32_t, int); // 将符号插入表中
 void processDef(Node*); 
 void analyse(Node*);
-char *type2str(Type); // 将type转换为字符串便于输出调试
+void type2str(Type, char*); // 将type转换为字符串便于输出调试
 
 int stack_top = -1;
 SymbolList symbol_table[HASH_TABLE_SIZE];
@@ -56,6 +57,7 @@ void popStack() {
     }
 
     // debug info
+    char str[128];
     for(int i = 0; i < stack_top; i++)
         printf("    ");
     printf("Frame %d:\n", stack_top);
@@ -75,7 +77,9 @@ void popStack() {
         }
         for(int i = 0; i < stack_top + 1; i++)
             printf("    ");
-        printf("%s: %s\n", type2str(head->type), head->name);
+        memset(str, 0, sizeof(str));
+        type2str(head->type, str);
+        printf("%s: %s\n", str, head->name);
     }
     printf("\n");
     //
@@ -126,16 +130,69 @@ Type getExpType(Node* exp) {
     if(exp == NULL)
         return NULL;
     if(exp->type == T_INT) {
-        Type t = malloc(SIZEOF(Type_));
-        t->kind = BASIC;
-        t->u.basic = TYPE_INT;
-        return t;
+        goto RETURN_DEFAULT_EXP_TYPE;
     }
     if(exp->type == T_FLOAT) {
         Type t = malloc(SIZEOF(Type_));
         t->kind = BASIC;
         t->u.basic = TYPE_FLOAT;
         return t;
+    }
+    if(exp->type == T_ID) {
+        uint32_t key = hash(exp->val.type_str);
+        SymbolList symbol = NULL;
+        for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next) {
+            if(!strcmp(exp->val.type_str, head->name)) {
+                symbol = head;
+                break;
+            }
+        }
+        if(symbol == NULL) {
+            printf("未定义变量: %d", exp->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        return copyType(symbol->type);
+    }
+    if(!strcmp(exp->name, "FuncCall")) {
+        Node *id = exp->sons, *params = id->next;
+        uint32_t key = hash(id->val.type_str);
+        SymbolList symbol = NULL;
+        Param param_type;
+        for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next)
+            if(!strcmp(head->name, id->val.type_str)) {
+                symbol = head;
+                break;
+            }
+        if(symbol == NULL) {
+            printf("函数未定义: %d\n", symbol->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        if(symbol->type->kind != FUNCTION) {
+            printf("对普通变量使用函数调用: %d\n", symbol->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        param_type = symbol->type->u.func->parameters;
+        while(param_type != NULL) {
+            if(params == NULL) {
+                printf("调用函数时形参不匹配: %d\n", symbol->line);
+                goto RETURN_DEFAULT_EXP_TYPE;
+            }
+            Type exp_type = getExpType(params);
+            if(!typeComp(param_type->type, exp_type)) {
+                printf("调用函数时形参不匹配: %d\n", symbol->line);
+                goto RETURN_DEFAULT_EXP_TYPE;
+            }
+            params = params->next;
+            param_type = param_type->next;
+        }
+        if(params != NULL) {
+            printf("调用函数时形参不匹配: %d\n", symbol->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        return copyType(symbol->type->u.func->ret);
+    }
+    if(!strcmp(exp->name, "ArrayEval")) {
+        // TODO:
     }
     if(!strcmp(exp->name, "PLUS") || !strcmp(exp->name, "MINUS") || !strcmp(exp->name, "STAR") || !strcmp(exp->name, "DIV")) {
         Type op[2];
@@ -149,6 +206,55 @@ Type getExpType(Node* exp) {
         }
         return op[0];
     }
+
+    RETURN_DEFAULT_EXP_TYPE: {
+        Type t = malloc(SIZEOF(Type_));
+        t->kind = BASIC;
+        t->u.basic = 0;
+        return t;
+    }
+}
+
+Type copyType(Type t) {
+    if(t == NULL)
+        return NULL;
+    Type ret_type = malloc(SIZEOF(Type_));
+    switch (t->kind)
+    {
+    case BASIC:
+        ret_type->kind = BASIC;
+        ret_type->u = t->u;
+        break;
+    case ARRAY:
+        ret_type->kind = ARRAY;
+        ret_type->u.array.size = t->u.array.size;
+        ret_type->u.array.elem = copyType(t->u.array.elem);
+        break;
+    case STRUCTURE: {
+        ret_type->kind = STRUCTURE;
+        FieldList *p_list = &ret_type->u.structure, src = t->u.structure;
+        while(src != NULL) {
+            (*p_list) = malloc(SIZEOF(FieldList_));
+            (*p_list)->type = copyType(src->type);
+            p_list = &((*p_list)->next), src = src->next;
+        }
+    }
+    case FUNCTION: {
+        ret_type->kind = FUNCTION;
+        Param *p_list = &(ret_type->u.func->parameters), src = t->u.func->parameters;
+        ret_type->u.func->ret = copyType(t->u.func->ret);
+        while(src != NULL) {
+            (*p_list) = malloc(SIZEOF(Param_));
+            (*p_list)->type = copyType(src->type);
+
+            p_list = &((*p_list)->next), src = src->next;
+        } 
+    }
+    default:
+        break;
+    }
+
+    return ret_type;
 }
 
 boolean typeComp(Type a, Type b) {
@@ -296,7 +402,7 @@ void processDef(Node* node) {
                     insertSymbol(name, t, VARDEC, var_dec->line);
                 } else {
                     Type t = getExpType(dec);
-                    if(typeComp(t, frame_stack[stack_top]->type))
+                    if(!typeComp(t, frame_stack[stack_top]->fs_next->type))
                         printf("类型不匹配: %d\n", dec->line);
                 }
             }
@@ -328,29 +434,31 @@ void start_semantics(Node *root) {
     analyse(root);
 }
 
-char *type2str(Type t) {
+void type2str(Type t, char* str) {
     switch (t->kind)
     {
         case BASIC:
-            return (t->u.basic == TYPE_INT ? "int" : "float");
+            sprintf(str, "%s", t->u.basic == TYPE_INT ? "int" : "float");
             break;
         case ARRAY: {
-            char *ret = type2str(t->u.array.elem);
-            if(t->u.array.elem->kind != ARRAY)
-                printf("%s", ret);
-            printf("[%d]", t->u.array.size);
+            type2str(t->u.array.elem, str + strlen(str));
+            sprintf(str + strlen(str), "[%d]", t->u.array.size);
             return "";
         }
         case FUNCTION: {
-            printf("(");
+            sprintf(str, "(");
             Param params = t->u.func->parameters;
             for(; params != NULL; params = params->next) {
-                printf("%s", type2str(params->type));
+                type2str(params->type, str + strlen(str));
                 if(params->next != NULL)
-                    printf(", ");
+                    sprintf(str + strlen(str), ", ");
             }
-            printf(") -> ");
-            return type2str(t->u.func->ret);
+            sprintf(str + strlen(str), ") -> ");
+            type2str(t->u.func->ret, str + strlen(str));
+            break;
+        }
+        case STRUCTURE: {
+            // TODO:
         }
         default:
             break;
