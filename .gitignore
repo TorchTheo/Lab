@@ -1,3 +1,8 @@
 Code/test.in
 *.zip
 *.pdf
+Code/lex.yy.c
+Code/*.o
+Code/syntax.output
+Code/syntax.tab.c
+Code/syntax.tab.h

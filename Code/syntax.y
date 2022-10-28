@@ -137,7 +137,8 @@ VarDec          : ID {
                     $$ = new_node("VarDec", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | VarDec LB INT RB {
-                    $$ = new_node("VarDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    // $$ = new_node("VarDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    $$ = new_node("VarDec", T_NTERMINAL, @1.first_line, 2, $1, $3);
                 }
                 | VarDec LB error RB {
                     yyerror("Invalid size of array");
@@ -438,6 +439,7 @@ Node *new_node(char *_name, SymbolType _type, ...) {
     va_start(list, _type);
     switch(_type) {
         case T_INT: {
+            node->line = yylineno;
             if ('O' == node->name[0]) // OCT
                 sscanf(va_arg(list, char*), "%od", &(node->val.type_int));
             else if ('H' == node->name[0]) // HEX
@@ -448,11 +450,13 @@ Node *new_node(char *_name, SymbolType _type, ...) {
         }
 
         case T_FLOAT: {
+            node->line = yylineno;
             sscanf(va_arg(list, char*), "%f", &(node->val.type_float));
             break;
         }
 
         case T_ID: case T_TYPE: case T_RELOP: case T_TERMINAL: {
+            node->line = yylineno;
             strcpy(node->val.type_str, va_arg(list, char*));
             break;
         }
@@ -478,6 +482,7 @@ Node *new_node(char *_name, SymbolType _type, ...) {
 }
 
 void print_AST(Node *node, int depth) {
+    printf("%d:\t", node->line);
     if (node->type != T_NULL)
         for(int i = 0; i < depth; i++)
             printf("  ");

@@ -3,12 +3,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdarg.h>
 extern Node* root;
 
 void popDelete(SymbolList);
 void pushStack();
 void popStack();
 void initTable();
+Type getSpeciferType(Node*);
 void insertSymbol(char*, Type, uint32_t, int);
 void processDef(Node*);
 void analyse(Node*);
@@ -52,7 +54,24 @@ void popStack() {
     // debug info
     printf("Frame %d:\n", stack_top);
     for(SymbolList head = frame_stack[stack_top]->fs_next; head != NULL; head = head->fs_next) {
-        printf("%s: %d\n", head->name, head->type->u.basic);
+        switch (head->type->kind)
+        {
+            case BASIC:
+                printf("%s: %s\n", (head->type->u.basic == TYPE_INT ? "int" : "float"), head->name);
+                break;
+            case ARRAY: {
+                Type type = head->type;
+                while(type->kind == ARRAY) {
+                    printf("[%d]", type->u.array.size);
+                    type = type->u.array.elem;
+                }
+                printf("%s: %s\n", (type->u.basic == TYPE_INT ? "int" : "float"), head->name);
+                break;
+            }
+        
+            default:
+                break;
+        }
     }
     printf("\n");
     //
@@ -72,6 +91,16 @@ void initTable() {
         symbol_table[i] = head;
         // symbol_table[i] = NULL;
     }
+}
+
+Type getSpeciferType(Node* specifier) {
+    Type t = malloc(SIZEOF(Type_));
+    t->kind = BASIC;
+    if(!strcmp(specifier->val.type_str, "int"))
+        t->u.basic = TYPE_INT;
+    else
+        t->u.basic = TYPE_FLOAT;
+    return t;
 }
 
 void insertSymbol(char* name, Type type, uint32_t kind, int line) {
@@ -116,19 +145,21 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
 
 void processDef(Node* node) {
     // TODO: 完善
-    Type t = malloc(SIZEOF(Type_));
     Node *specifier = node, *dec = node->next;
     if(specifier->type == T_TYPE) {
-        t->kind = BASIC;
-        if(!strcmp(specifier->val.type_str, "int"))
-            t->u.basic = TYPE_INT;
-        else if(!strcmp(specifier->val.type_str, "float"))
-            t->u.basic = TYPE_FLOAT;
         for (; dec != NULL; dec = dec->next) {
             if(!strcmp(dec->name, "VarDec")) {
                 Node *info = dec->sons;
-                if(info->type == T_ID)
-                    insertSymbol(info->val.type_str, t, VARDEC, info->line);
+                Type t = NULL, *tail = &t;
+                while(info->type != T_ID) {
+                    *tail = malloc(SIZEOF(Type_));
+                    (*tail)->kind = ARRAY;
+                    (*tail)->u.array.size = info->next->val.type_int;
+                    info = info->sons;
+                    tail = &((*tail)->u.array.elem);
+                }
+                (*tail) = getSpeciferType(specifier);
+                insertSymbol(info->val.type_str, t, VARDEC, info->line);
             }
         }
     }

@@ -18,7 +18,8 @@ int main(int argc, char **argv) {
     yyrestart(f);
     yyparse();
     if(!error) {
-        // print_AST(root, 0);
+        print_AST(root, 0);
+        printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
         start_semantics(root);
     }
     return 0;
