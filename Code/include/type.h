@@ -1,4 +1,6 @@
 typedef unsigned int uint32_t;
+typedef unsigned char uint8_t;
+typedef unsigned char boolean;
 #define SIZEOF(x) sizeof(struct x)
 typedef enum {
     T_INT,

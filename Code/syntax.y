@@ -6,7 +6,6 @@
     #include <stdarg.h>
     #include <string.h>
     #include "include/type.h"
-    typedef unsigned char uint8_t;
     extern int error;
     
 
@@ -70,8 +69,12 @@ ExtDef          : Specifier ExtDecList SEMI {
                     // $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 2, $1, $2);
                     $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 1, $1);
                 }
+                | Specifier FunDec SEMI {
+                    // Function declaration
+                    $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                }
                 | Specifier FunDec CompSt {
-                    // Function
+                    // Function definition
                     $$ = new_node("ExtDef", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
                 }
                 | Specifier ExtDecList error {
@@ -150,10 +153,12 @@ VarDec          : ID {
                 }
                 ;
 FunDec          : ID LP VarList RP {
-                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    // $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 2, $1, $3);
                 }
                 | ID LP RP {
-                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | ID LP error RP {
                     yyerror("Invalid parameters of function");
@@ -165,10 +170,12 @@ FunDec          : ID LP VarList RP {
                 }
                 ;
 VarList         : ParamDec COMMA VarList {
-                    $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $1; $1->next = $3;
                 }
                 | ParamDec {
-                    $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("VarList", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | ParamDec error VarList {
                     yyerror("Missing ',' between parameters");
@@ -185,7 +192,10 @@ ParamDec        : Specifier VarDec {
                 ;
 /* Statements */
 CompSt          : LC DefList StmtList RC {
-                    $$ = new_node("CompSt", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    // $$ = new_node("CompSt", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
+                    $$ = new_node("CompSt", T_NTERMINAL, @1.first_line, 2,
+                                new_node("DefList", T_NTERMINAL, @1.first_line, 1, $2),
+                                new_node("StmtList", T_NTERMINAL, @1.first_line, 1, $3));
                 }
                 | error RC {
                     yyerror("Invalid statements");
@@ -193,7 +203,8 @@ CompSt          : LC DefList StmtList RC {
                 }
                 ;
 StmtList        : Stmt StmtList {
-                    $$ = new_node("StmtList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("StmtList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = $1; $1->next = $2;
                 }
                 | /* Empty */ {
                     $$ = new_node("StmtList", T_NULL);
@@ -260,14 +271,16 @@ Stmt            : Exp SEMI {
                 ;
 /* Local Definitions */
 DefList         : Def DefList {
-                    $$ = new_node("DefList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("DefList", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = $1; $1->next = $2;
                 }
                 | /* Empty */ {
                     $$ = new_node("DefList", T_NULL);
                 }
                 ;
 Def             : Specifier DecList SEMI {
-                    $$ = new_node("Def", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Def", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = new_node("Def", T_NTERMINAL, @1.first_line, 2, $1, $2);
                 }
                 | Specifier DecList error {
                     yyerror("Probably missing ';' at this line or last line");
@@ -279,10 +292,12 @@ Def             : Specifier DecList SEMI {
                 }
                 ;
 DecList         : Dec {
-                    $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | Dec COMMA DecList {
-                    $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("DecList", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $1; $1->next = $3;
                 }
                 | Dec error DecList {
                     yyerror("Missing ',' between variables");
@@ -294,10 +309,12 @@ DecList         : Dec {
                 }
                 ;
 Dec             : VarDec {
-                    $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | VarDec ASSIGNOP Exp {
-                    $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Dec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = $1; $1->next = $3;
                 }
                 | VarDec ASSIGNOP error {
                     yyerror("Invalid value");
@@ -482,10 +499,11 @@ Node *new_node(char *_name, SymbolType _type, ...) {
 }
 
 void print_AST(Node *node, int depth) {
-    printf("%d:\t", node->line);
-    if (node->type != T_NULL)
+    if (node->type != T_NULL) {
+        printf("%d:\t", node->line);
         for(int i = 0; i < depth; i++)
             printf("  ");
+    }
     switch (node->type) {
         case T_INT: {
             printf("INT: %d\n", node->val.type_int);
