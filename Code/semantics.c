@@ -28,6 +28,10 @@ static SymbolList frame_stack[FRAME_STACK_SIZE];
 
 static Type ret_type = NULL; // 
 
+// struct flag
+static uint8_t struct_state = 0; // 
+static uint32_t anoymous_struct = 0;
+
 uint32_t hash(char *name) {
     uint32_t val = 0, i;
     for(; *name; ++name) {
@@ -108,11 +112,63 @@ void initTable() {
 
 Type getSpeciferType(Node* specifier) {
     Type t = malloc(SIZEOF(Type_));
-    t->kind = BASIC;
-    if(!strcmp(specifier->val.type_str, "int"))
-        t->u.basic = TYPE_INT;
-    else
-        t->u.basic = TYPE_FLOAT;
+    if(specifier->type == T_TYPE) {
+        t->kind = BASIC;
+        if(!strcmp(specifier->val.type_str, "int"))
+            t->u.basic = TYPE_INT;
+        else
+            t->u.basic = TYPE_FLOAT;
+    } else {
+        t->kind = STRUCTURE;
+        Node *detail = specifier->sons, *struct_symbol = NULL, *def_list = NULL, *var_dec = NULL;
+        
+        if(specifier->next != NULL && !strcmp(specifier->next->name, "VarDec")) {
+            var_dec = specifier->next;
+            struct_state = 0;
+        }
+        if(detail->type == T_ID)
+            struct_symbol = detail;
+        else
+            def_list = detail, struct_symbol = def_list->next;
+        char *name;
+        if(struct_symbol != NULL)
+            name = struct_symbol->val.type_str;
+        else {
+            name = malloc(30 * sizeof(char));
+            sprintf(name, "__Struct@%d", anoymous_struct++);
+        }
+        if(def_list != NULL)
+            t->u.structure = getFieldType(def_list, FIELD_TYPE_STRUCT);
+        switch(struct_state) {
+            case 0: {
+                uint32_t key = hash(name);
+                SymbolList symbol = NULL;
+                for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next)
+                    if(!strcmp(head->name, name))
+                        symbol = head;
+                if(symbol == NULL) {
+                    if(def_list == NULL) 
+                        printf("使用未定义的结构体定义变量: %d", specifier->line);
+                    else
+                        insertSymbol(name, copyType(t), STRUCTDEF, specifier->line);
+                } else {
+                    if(def_list == NULL) {
+                        if(symbol->type->kind != STRUCTURE)
+                            printf("结构体与前变量重名: %d\n", specifier->line);
+                        else
+                            t = copyType(symbol->type);
+                    } else {
+                        // struct A {int a;} var;
+                    }
+                }
+                insertSymbol(var_dec->sons->val.type_str, copyType(t), VARDEC, var_dec->line);
+                break;
+            }
+            case 1:
+                insertSymbol(name ,t, STRUCTDEF, specifier->line);
+                break;
+        }
+    }
     return t;
 }
 
@@ -313,6 +369,9 @@ FieldList getFieldType(Node* node, uint32_t field_type) {
                     case FIELD_TYPE_PARAM:
                         insertSymbol(name, getVarDecType(specifier, var_dec, &name), PARAMDEC, var_dec->line);
                         break;
+                    case FIELD_TYPE_STRUCT:
+                        insertSymbol(name, getVarDecType(specifier, var_dec, &name), FIELDDEC, var_dec->line);
+                        break;
                 }
             }
         }
@@ -354,19 +413,23 @@ Type copyType(Type t) {
         while(src != NULL) {
             (*p_list) = malloc(SIZEOF(FieldList_));
             (*p_list)->type = copyType(src->type);
+            (*p_list)->name = src->name;
             p_list = &((*p_list)->next), src = src->next;
         }
+        break;
     }
     case FUNCTION: {
         ret_type->kind = FUNCTION;
         FieldList *p_list = &(ret_type->u.func->parameters), src = t->u.func->parameters;
         ret_type->u.func->ret = copyType(t->u.func->ret);
         while(src != NULL) {
+            (*p_list)->name = src->name;
             (*p_list) = malloc(SIZEOF(FieldList_));
             (*p_list)->type = copyType(src->type);
 
             p_list = &((*p_list)->next), src = src->next;
         } 
+        break;
     }
     default:
         break;
@@ -469,6 +532,13 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
             }
             break;
         }
+        case STRUCTDEF:
+            for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next) {
+                if(!strcmp(name, head->name)) {
+                    printf("结构体重名: %d\n", line);
+                }
+            }
+            break;
         default:
             break;
     }
@@ -495,6 +565,12 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
 void processDef(Node* node) {
     // TODO: 完善
     Node *specifier = node, *dec = node->next;
+    if(!strcmp(specifier->name, "StructSpecifier")) {
+        uint8_t prev_state = struct_state;
+        struct_state = 1;
+        getSpeciferType(specifier);
+        struct_state = prev_state;
+    }
     if(specifier->type == T_TYPE) {
         if(!strcmp(dec->name, "FunDec")) {
             Node *func_symbol = dec->sons, *params_dec_list = func_symbol->next, *param_dec;
@@ -620,7 +696,17 @@ void type2str(Type t, char* str) {
             break;
         }
         case STRUCTURE: {
-            // TODO:
+            sprintf(str + strlen(str), "{");
+            FieldList fields = t->u.structure;
+            for(; fields != NULL; fields = fields->next) {
+                type2str(fields->type, str + strlen(str));
+                sprintf(str + strlen(str), ": %s", fields->name);
+                if(fields->next != NULL)
+                    sprintf(str + strlen(str), "; ");
+            }
+
+            sprintf(str + strlen(str), "}");
+            break;
         }
         default:
             break;

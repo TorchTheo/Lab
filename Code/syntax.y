@@ -114,10 +114,12 @@ Specifier       : TYPE {
                 }
                 ;
 StructSpecifier : STRUCT OptTag LC DefList RC {
-                    $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    // $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 2, new_node("DefList", T_NTERMINAL, @4.first_line, 1, $4), $2);
                 }
                 | STRUCT Tag {
-                    $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = new_node("StructSpecifier", T_NTERMINAL, @1.first_line, 1, $2);
                 }
                 | STRUCT OptTag LC error RC {
                     yyerror("Invalid struct definition");
@@ -125,14 +127,17 @@ StructSpecifier : STRUCT OptTag LC DefList RC {
                 }
                 ;
 OptTag          : ID {
-                    $$ = new_node("OptTag", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("OptTag", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 | /* Empty */ {
-                    $$ = new_node("OptTag", T_NULL);
+                    // $$ = new_node("OptTag", T_NULL);
+                    $$ = NULL;
                 }
                 ;
 Tag             : ID {
-                    $$ = new_node("Tag", T_NTERMINAL, @1.first_line, 1, $1);
+                    // $$ = new_node("Tag", T_NTERMINAL, @1.first_line, 1, $1);
+                    $$ = $1;
                 }
                 ;
 /* Declarations */
