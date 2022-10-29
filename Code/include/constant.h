@@ -6,3 +6,7 @@
 #define FUNCDEF             3
 #define TRUE                1
 #define FALSE               0
+#define PARAMDEC            4
+#define FIELDDEC            5
+#define FIELD_TYPE_PARAM    0
+#define FIELD_TYPE_STRUCT   1

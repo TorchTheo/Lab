@@ -13,6 +13,7 @@ void initTable();
 Type getSpeciferType(Node*); // 从Specifier中获取类型
 Type getVarDecType(Node*, Node*, char**); // 从VarDec中获得类型
 Type getExpType(Node*); // 得到Exp对应的类型
+FieldList getFieldType(Node*, uint32_t);
 Type copyType(Type);
 boolean typeComp(Type, Type); // 比较是否结构相同
 void insertSymbol(char*, Type, uint32_t, int); // 将符号插入表中
@@ -161,7 +162,7 @@ Type getExpType(Node* exp) {
         Node *func_symbol = exp->sons, *params = func_symbol->next;
         uint32_t key = hash(func_symbol->val.type_str);
         SymbolList symbol = NULL;
-        Param param_type;
+        FieldList param_type;
         for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next)
             if(!strcmp(head->name, func_symbol->val.type_str)) {
                 symbol = head;
@@ -247,7 +248,11 @@ Type getExpType(Node* exp) {
         }
         return copyType(arr_symbol_type);
     }
-    if(!strcmp(exp->name, "PLUS") || !strcmp(exp->name, "MINUS") || !strcmp(exp->name, "STAR") || !strcmp(exp->name, "DIV")) {
+    if(!strcmp(exp->name, "PLUS") || 
+       !strcmp(exp->name, "MINUS") || 
+       !strcmp(exp->name, "STAR") || 
+       !strcmp(exp->name, "DIV") ||
+       !strcmp(exp->name, "RELOP")) {
         Type op[2];
         op[0] = getExpType(exp->sons);
         op[1] = getExpType(exp->sons->next);
@@ -260,12 +265,71 @@ Type getExpType(Node* exp) {
         return op[0];
     }
 
+    if(!strcmp(exp->name, "AND") ||
+       !strcmp(exp->name, "OR") ||
+       !strcmp(exp->name, "NOT")) {
+        Type op[2];
+        op[0] = getExpType(exp->sons);
+        op[1] = getExpType(exp->sons->next);
+        if(op[0]->kind != BASIC || op[0]->u.basic != TYPE_INT) {
+            printf("操作数类型不匹配: %d\n", exp->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        return op[0];
+    }
+
+    if(!strcmp(exp->name, "ASSIGNOP")) {
+        Type op[2];
+        op[0] = getExpType(exp->sons);
+        op[1] = getExpType(exp->sons->next);
+        if(!typeComp(op[0], op[1]))
+            printf("操作数类型不匹配: %d\n", exp->line);
+        return op[0];
+    }
+
+    if(!strcmp(exp->name, "DOT")) {
+        // TODO: struct 取成员
+    }
+
     RETURN_DEFAULT_EXP_TYPE: {
         Type t = malloc(SIZEOF(Type_));
         t->kind = BASIC;
         t->u.basic = 0;
         return t;
     }
+}
+
+FieldList getFieldType(Node* node, uint32_t field_type) {
+    Node *def = node->sons;
+    FieldList field_list = NULL;
+    pushStack();
+    for(; def != NULL; def = def->next) {
+        Node *specifier = def->sons, *dec = specifier->next;
+        for(; dec != NULL; dec = dec->next) {
+            if(!strcmp(dec->name, "VarDec")) {
+                Node *var_dec = dec->sons;
+                char *name;
+                switch(field_type) {
+                    case FIELD_TYPE_PARAM:
+                        insertSymbol(name, getVarDecType(specifier, var_dec, &name), PARAMDEC, var_dec->line);
+                        break;
+                }
+            }
+        }
+    }
+
+    for(SymbolList head = frame_stack[stack_top]->fs_next; head != NULL; head = head->fs_next) {
+        FieldList field = malloc(SIZEOF(FieldList_));
+        field->name = head->name;
+        field->next = field_list;
+        field->type = head->type;
+        field_list = field;
+
+        symbol_table[head->key]->tb_next = head->fs_next;
+    }
+    frame_stack[stack_top--] = NULL;
+
+    return field_list;
 }
 
 Type copyType(Type t) {
@@ -295,10 +359,10 @@ Type copyType(Type t) {
     }
     case FUNCTION: {
         ret_type->kind = FUNCTION;
-        Param *p_list = &(ret_type->u.func->parameters), src = t->u.func->parameters;
+        FieldList *p_list = &(ret_type->u.func->parameters), src = t->u.func->parameters;
         ret_type->u.func->ret = copyType(t->u.func->ret);
         while(src != NULL) {
-            (*p_list) = malloc(SIZEOF(Param_));
+            (*p_list) = malloc(SIZEOF(FieldList_));
             (*p_list)->type = copyType(src->type);
 
             p_list = &((*p_list)->next), src = src->next;
@@ -320,8 +384,6 @@ boolean typeComp(Type a, Type b) {
         case BASIC:
             return a->u.basic == b->u.basic;
         case ARRAY:
-            if(a->u.array.size != b->u.array.size)
-                return FALSE;
             return typeComp(a->u.array.elem, b->u.array.elem);
         case STRUCTURE:{
             FieldList l[2] = {a->u.structure, b->u.structure};
@@ -338,15 +400,11 @@ boolean typeComp(Type a, Type b) {
         case FUNCTION: {
             if(!typeComp(a->u.func->ret, b->u.func->ret))
                 return FALSE;
-            Param l[2] = {a->u.func->parameters, b->u.func->parameters};
-            while(l[0] != NULL || l[1] != NULL) {
-                if(l[0] == NULL || l[1] == NULL)
-                    return FALSE;
-                if(!typeComp(l[0]->type, l[1]->type))
-                    return FALSE;
-                l[0] = l[0]->next;
-                l[1] = l[1]->next;
-            }
+            struct Type_ params[2];
+            params[0].kind = params[1].kind = STRUCTURE;
+            params[0].u.structure = a->u.func->parameters;
+            params[1].u.structure = b->u.func->parameters;
+            return typeComp(&params[0], &params[1]);
             break;
         }
     }
@@ -389,6 +447,28 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
                     
                 }
             }
+        case PARAMDEC: {
+            for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next) {
+                if(!strcmp(name, head->name)) {
+                    if(head->type->kind == BASIC && head->dep != stack_top)
+                        break;
+                    printf("重定义: %d\n", line);
+                    name = "";
+                }
+            }
+            break;
+        }
+        case FIELDDEC: {
+            for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next) {
+                if(!strcmp(name, head->name)) {
+                    if(head->dep == stack_top) {
+                        printf("结构体域重定义: %d\n", line);
+                        name = "";
+                    }
+                }
+            }
+            break;
+        }
         default:
             break;
     }
@@ -417,32 +497,25 @@ void processDef(Node* node) {
     Node *specifier = node, *dec = node->next;
     if(specifier->type == T_TYPE) {
         if(!strcmp(dec->name, "FunDec")) {
-            Node *func_symbol = dec->sons, *params = func_symbol->next;
+            Node *func_symbol = dec->sons, *params_dec_list = func_symbol->next, *param_dec;
             Type t = malloc(SIZEOF(Type_));
             t->kind = FUNCTION;
             t->u.func = malloc(SIZEOF(Func_));
             t->u.func->ret = getSpeciferType(specifier);
-            Param *tail = &(t->u.func->parameters);
-
-            if(dec->next != NULL) { // 函数定义开新栈
-                pushStack();
-            } 
-
-            for(; params != NULL; params = params->next) {
-                Node *param_specifier = params->sons, *param = param_specifier->next, *param_vardec = param->sons;
-                char *name;
-                (*tail) = malloc(SIZEOF(Param_));
-                (*tail)->type = getVarDecType(param_specifier, param_vardec, &name);
-                (*tail)->name = name;
-                if(dec->next != NULL) 
-                    insertSymbol(name, (*tail)->type, VARDEC, param_vardec->line);
-                tail = &((*tail)->next);
-            }
+            if(params_dec_list != NULL)
+                t->u.func->parameters = getFieldType(params_dec_list, FIELD_TYPE_PARAM);
 
             if(dec->next == NULL) {
                 insertSymbol(func_symbol->val.type_str, t, FUNCDEC, dec->line);
             } else {
                 Node *def_list = dec->next->sons, *stmt_list = def_list->next;
+                FieldList param_field = t->u.func->parameters;
+                pushStack();
+                if(params_dec_list != NULL) {
+                    param_dec = func_symbol->next->sons;
+                    for(; param_dec != NULL; param_dec = param_dec->next, param_field = param_field->next)
+                        insertSymbol(param_field->name, copyType(param_field->type), VARDEC, param_dec->line);
+                }
                 ret_type = t->u.func->ret;
                 stack_top--;
                 insertSymbol(func_symbol->val.type_str, t, FUNCDEF, dec->line);
@@ -536,7 +609,7 @@ void type2str(Type t, char* str) {
         }
         case FUNCTION: {
             sprintf(str, "(");
-            Param params = t->u.func->parameters;
+            FieldList params = t->u.func->parameters;
             for(; params != NULL; params = params->next) {
                 type2str(params->type, str + strlen(str));
                 if(params->next != NULL)

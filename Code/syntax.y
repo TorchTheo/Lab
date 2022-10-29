@@ -154,7 +154,8 @@ VarDec          : ID {
                 ;
 FunDec          : ID LP VarList RP {
                     // $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
-                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 2, $1, $3);
+                    // $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 2, $1, $3);
+                    $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 2, $1, new_node("ParamDecList", T_NTERMINAL, @3.first_line, 1, $3));
                 }
                 | ID LP RP {
                     // $$ = new_node("FunDec", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);

@@ -33,7 +33,6 @@ struct Node {
 typedef struct Type_* Type;
 typedef struct FieldList_* FieldList;
 typedef struct Func_* Func;
-typedef struct Param_* Param;
 typedef struct SymbolList_* SymbolList;
 
 struct Type_ {
@@ -55,13 +54,7 @@ struct FieldList_ {
 struct Func_ {
     char *name; // 函数名
     Type ret; // 返回类型
-    Param parameters; // 参数列表
-};
-
-struct Param_ {
-    Type type; // 参数类型
-    char *name; // 参数名
-    Param next; // 下一个参数
+    FieldList parameters; // 参数列表
 };
 
 struct SymbolList_ {
