@@ -7,3 +7,4 @@ Code/syntax.output
 Code/syntax.tab.c
 Code/syntax.tab.h
 Code/parser
+.vscode/

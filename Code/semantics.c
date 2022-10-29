@@ -113,15 +113,16 @@ Type getSpeciferType(Node* specifier) {
 }
 
 Type getVarDecType(Node* specifier, Node* var_dec, char **name) {
-    Type t = NULL, *tail = &t;
+    Type t = getSpeciferType(specifier);
     while(var_dec->type != T_ID) {
-        *tail = malloc(SIZEOF(Type_));
-        (*tail)->kind = ARRAY;
-        (*tail)->u.array.size = var_dec->next->val.type_int;
+        Type arr_type = malloc(SIZEOF(Type_));
+        arr_type->kind = ARRAY;
+        arr_type->u.array.base = getSpeciferType(specifier);
+        arr_type->u.array.elem = t;
+        arr_type->u.array.size = var_dec->next->val.type_int;
         var_dec = var_dec->sons;
-        tail = &((*tail)->u.array.elem);
+        t = arr_type;
     }
-    (*tail) = getSpeciferType(specifier);
     (*name) = var_dec->val.type_str;
     return t;
 }
@@ -154,45 +155,94 @@ Type getExpType(Node* exp) {
         return copyType(symbol->type);
     }
     if(!strcmp(exp->name, "FuncCall")) {
-        Node *id = exp->sons, *params = id->next;
-        uint32_t key = hash(id->val.type_str);
+        Node *func_symbol = exp->sons, *params = func_symbol->next;
+        uint32_t key = hash(func_symbol->val.type_str);
         SymbolList symbol = NULL;
         Param param_type;
         for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next)
-            if(!strcmp(head->name, id->val.type_str)) {
+            if(!strcmp(head->name, func_symbol->val.type_str)) {
                 symbol = head;
                 break;
             }
         if(symbol == NULL) {
-            printf("函数未定义: %d\n", symbol->line);
+            printf("函数未定义: %d\n", func_symbol->line);
             goto RETURN_DEFAULT_EXP_TYPE;
         }
         if(symbol->type->kind != FUNCTION) {
-            printf("对普通变量使用函数调用: %d\n", symbol->line);
+            printf("对普通变量使用函数调用: %d\n", func_symbol->line);
             goto RETURN_DEFAULT_EXP_TYPE;
         }
         param_type = symbol->type->u.func->parameters;
         while(param_type != NULL) {
             if(params == NULL) {
-                printf("调用函数时形参不匹配: %d\n", symbol->line);
+                printf("调用函数时形参不匹配: %d\n", func_symbol->line);
                 goto RETURN_DEFAULT_EXP_TYPE;
             }
             Type exp_type = getExpType(params);
             if(!typeComp(param_type->type, exp_type)) {
-                printf("调用函数时形参不匹配: %d\n", symbol->line);
+                printf("调用函数时形参不匹配: %d\n", func_symbol->line);
                 goto RETURN_DEFAULT_EXP_TYPE;
             }
             params = params->next;
             param_type = param_type->next;
         }
         if(params != NULL) {
-            printf("调用函数时形参不匹配: %d\n", symbol->line);
+            printf("调用函数时形参不匹配: %d\n", func_symbol->line);
             goto RETURN_DEFAULT_EXP_TYPE;
         }
         return copyType(symbol->type->u.func->ret);
     }
     if(!strcmp(exp->name, "ArrayEval")) {
         // TODO:
+        char *arr_name;
+        uint32_t key;
+        Node *arr_eval = exp;
+        Type arr_type = NULL, arr_symbol_type;
+        SymbolList symbol = NULL;
+        while(!strcmp(arr_eval->name, "ArrayEval"))
+            arr_eval = arr_eval->sons;
+        arr_name = arr_eval->val.type_str;
+        key = hash(arr_name);
+        for(SymbolList head = symbol_table[key]->tb_next; head != NULL; head = head->tb_next) {
+            if(!strcmp(arr_name, head->name)) {
+                symbol = head;
+                break;
+            }
+        }
+        if(symbol == NULL) {
+            printf("未定义变量: %d", arr_eval->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        if(symbol->type->kind != ARRAY) {
+            printf("非数组变量使用数组取值: %d\n", arr_eval->line);
+            goto RETURN_DEFAULT_EXP_TYPE;
+        }
+
+        arr_type = NULL, arr_symbol_type = symbol->type;
+        arr_eval = exp->sons;
+        while(arr_eval != NULL) {
+            Type outer_arr_type = malloc(SIZEOF(Type_)), i;
+            outer_arr_type->kind = ARRAY;
+            outer_arr_type->u.array.elem = arr_type;
+            outer_arr_type->u.array.size = 0;
+            i = getExpType(arr_eval->next);
+            if(i->kind != BASIC || i->u.basic != TYPE_INT) {
+                printf("数组下标不合法: %d\n", arr_eval->next->line);
+            }
+
+            arr_type = outer_arr_type;
+            arr_eval = arr_eval->sons;
+        }
+        while(arr_type != NULL) {
+            if(arr_symbol_type->kind != ARRAY) {
+                printf("数组下标不合法: %d\n", symbol->line);
+                return arr_type;
+            }
+
+            arr_type = arr_type->u.array.elem;
+            arr_symbol_type = arr_symbol_type->u.array.elem;
+        }
+        return copyType(arr_symbol_type);
     }
     if(!strcmp(exp->name, "PLUS") || !strcmp(exp->name, "MINUS") || !strcmp(exp->name, "STAR") || !strcmp(exp->name, "DIV")) {
         Type op[2];
@@ -228,6 +278,7 @@ Type copyType(Type t) {
     case ARRAY:
         ret_type->kind = ARRAY;
         ret_type->u.array.size = t->u.array.size;
+        ret_type->u.array.base = copyType(t->u.array.base);
         ret_type->u.array.elem = copyType(t->u.array.elem);
         break;
     case STRUCTURE: {
@@ -441,9 +492,12 @@ void type2str(Type t, char* str) {
             sprintf(str, "%s", t->u.basic == TYPE_INT ? "int" : "float");
             break;
         case ARRAY: {
-            type2str(t->u.array.elem, str + strlen(str));
-            sprintf(str + strlen(str), "[%d]", t->u.array.size);
-            return "";
+            while(t->kind == ARRAY) {
+                sprintf(str + strlen(str), "[%d]", t->u.array.size);
+                t = t->u.array.elem;
+            }
+            type2str(t, str + strlen(str));
+            break;
         }
         case FUNCTION: {
             sprintf(str, "(");

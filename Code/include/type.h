@@ -40,7 +40,7 @@ struct Type_ {
     enum {BASIC, ARRAY, STRUCTURE, FUNCTION} kind;
     union {
         enum {TYPE_INT, TYPE_FLOAT} basic; // 基本类型
-        struct {Type elem; int size;} array; // 数组
+        struct {Type base; Type elem; int size;} array; // 数组
         FieldList structure; // 结构体
         Func func;
     } u;
