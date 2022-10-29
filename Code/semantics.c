@@ -642,7 +642,7 @@ void processStmt(Node *node) {
             printf("返回值类型不匹配: %d", node->sons->line);
         }
     } else {
-
+        Type exp_type = getExpType(node);
     }
 }
 

@@ -18,7 +18,7 @@ LFO = $(LFC:.c=.o)
 YFO = $(YFC:.c=.o)
 
 # 测试用例：Test目录下的所有.cmm文件
-TESTS = $(shell find ../Test/ -name "*.cmm")
+TESTS = $(shell find Test/ -name "*.in")
 
 parser: syntax $(filter-out $(LFO),$(OBJS))
 	$(CC) -o parser $(filter-out $(LFO),$(OBJS)) -lfl -ly
@@ -37,7 +37,7 @@ syntax-c: $(YFILE)
 # 定义的一些伪目标
 .PHONY: clean test git
 test: 
-	$(foreach tst, $(TESTS), ./parser $(tst) > $(tst:.cmm=.o);)
+	$(foreach tst, $(TESTS), ./parser $(tst) > $(tst:.in=.o);)
 	
 clean:
 	rm -f parser lex.yy.c syntax.tab.c syntax.tab.h syntax.output
@@ -45,6 +45,7 @@ clean:
 	rm -f $(LFC) $(YFC) $(YFC:.c=.h)
 	rm -f *~
 	rm -f ../Test/*.o
+	rm -f Test/*.o
 
 git:
 	git add ../.; git commit -a -m $(MSG)
