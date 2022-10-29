@@ -17,12 +17,15 @@ Type copyType(Type);
 boolean typeComp(Type, Type); // 比较是否结构相同
 void insertSymbol(char*, Type, uint32_t, int); // 将符号插入表中
 void processDef(Node*); 
+void processStmt(Node*);
 void analyse(Node*);
 void type2str(Type, char*); // 将type转换为字符串便于输出调试
 
-int stack_top = -1;
-SymbolList symbol_table[HASH_TABLE_SIZE];
-SymbolList frame_stack[FRAME_STACK_SIZE];
+static int stack_top = -1;
+static SymbolList symbol_table[HASH_TABLE_SIZE];
+static SymbolList frame_stack[FRAME_STACK_SIZE];
+
+static Type ret_type = NULL; // 
 
 uint32_t hash(char *name) {
     uint32_t val = 0, i;
@@ -414,7 +417,7 @@ void processDef(Node* node) {
     Node *specifier = node, *dec = node->next;
     if(specifier->type == T_TYPE) {
         if(!strcmp(dec->name, "FunDec")) {
-            Node *id = dec->sons, *params = id->next;
+            Node *func_symbol = dec->sons, *params = func_symbol->next;
             Type t = malloc(SIZEOF(Type_));
             t->kind = FUNCTION;
             t->u.func = malloc(SIZEOF(Func_));
@@ -437,12 +440,14 @@ void processDef(Node* node) {
             }
 
             if(dec->next == NULL) {
-                insertSymbol(id->val.type_str, t, FUNCDEC, dec->line);
+                insertSymbol(func_symbol->val.type_str, t, FUNCDEC, dec->line);
             } else {
                 Node *def_list = dec->next->sons, *stmt_list = def_list->next;
+                ret_type = t->u.func->ret;
                 stack_top--;
-                insertSymbol(id->val.type_str, t, FUNCDEF, dec->line);
+                insertSymbol(func_symbol->val.type_str, t, FUNCDEF, dec->line);
                 analyse(def_list);
+                ret_type = NULL;
             }
         } else {
             for (; dec != NULL; dec = dec->next) {
@@ -461,6 +466,37 @@ void processDef(Node* node) {
     }
 }
 
+void processStmt(Node *node) {
+    if(!strcmp("Compst", node->name))
+        analyse(node->sons);
+    else if(!strcmp("IF", node->name)) {
+        Node *cond = node->sons, *if_stmt = cond->next;
+        Type cond_type = getExpType(cond->sons);
+        if(cond_type->kind != BASIC || cond_type->u.basic != TYPE_FLOAT) {
+            printf("操作类型不匹配: %d\n", cond->line);
+        }
+        processStmt(if_stmt->sons);
+        if(node->next != NULL) {
+            // else
+            processStmt(node->next->sons->sons);
+        }
+    } else if(!strcmp("WHILE", node->name)) {
+        Node *cond = node->sons, *while_stmt = cond->next;
+        Type cond_type = getExpType(cond->sons);
+        if(cond_type->kind != BASIC || cond_type->u.basic != TYPE_FLOAT) {
+            printf("操作类型不匹配: %d\n", cond->line);
+        }
+        processStmt(while_stmt->sons);
+    } else if(!strcmp("RETURN", node->name)) {
+        Type exp_type = getExpType(node->sons);
+        if(!typeComp(ret_type, exp_type)) {
+            printf("返回值类型不匹配: %d", node->sons->line);
+        }
+    } else {
+
+    }
+}
+
 void analyse(Node* root) {
     pushStack();
     if(root == NULL || root->type == T_NULL)
@@ -472,9 +508,8 @@ void analyse(Node* root) {
         else if(!strcmp(root->name, "DefList")) {
             for(Node* def = root->sons; def != NULL; def = def->next)
                 processDef(def->sons);
-            if(root->next != NULL) {
-                // TODO: 处理Stmtlist
-            }
+            for(Node* stmt = root->next->sons; stmt != NULL; stmt = stmt->next)
+                processStmt(stmt->sons);
         }
     }
     popStack();

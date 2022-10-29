@@ -212,22 +212,35 @@ StmtList        : Stmt StmtList {
                 }
                 ;
 Stmt            : Exp SEMI {
-                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    // $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 2, $1, $2);
+                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | CompSt {
                     $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 1, $1);
                 }
                 | RETURN Exp SEMI {
-                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    // $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
+                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 1, $1);
+                    $1->sons = $2;
                 }
                 | IF LP Exp RP Stmt {
-                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    // $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 1, $1);
+                    $1->sons = new_node("Cond", T_NTERMINAL, @3.first_line, 1, $3);
+                    $1->sons->next = $5;
                 }
                 | IF LP Exp RP Stmt ELSE Stmt {
-                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 7, $1, $2, $3, $4, $5, $6, $7);
+                    // $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 7, $1, $2, $3, $4, $5, $6, $7);
+                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 2, $1, $6);
+                    $1->sons = new_node("Cond", T_NTERMINAL, @3.first_line, 1, $3);
+                    $1->sons->next = $5;
+                    $6->sons = $7;
                 }
                 | WHILE LP Exp RP Stmt {
-                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    // $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 5, $1, $2, $3, $4, $5);
+                    $$ = new_node("Stmt", T_NTERMINAL, @1.first_line, 1, $1);
+                    $1->sons = new_node("Cond", T_NTERMINAL, @3.first_line, 1, $3);
+                    $1->sons->next = $5;
                 }
                 | Exp error {
                     yyerror("Probably missing ';' at this line or last line");
