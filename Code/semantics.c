@@ -30,7 +30,8 @@ static Type ret_type = NULL; //
 
 // struct flag
 static uint8_t struct_state = 0; // 
-static uint32_t anoymous_struct = 0;
+static uint32_t __struct = 0;
+static uint32_t __field = 0;
 
 uint32_t hash(char *name) {
     uint32_t val = 0, i;
@@ -135,7 +136,7 @@ Type getSpeciferType(Node* specifier) {
             name = struct_symbol->val.type_str;
         else {
             name = malloc(30 * sizeof(char));
-            sprintf(name, "__Struct@%d", anoymous_struct++);
+            sprintf(name, "__Struct@%d", __struct++);
         }
         if(def_list != NULL)
             t->u.structure = getFieldType(def_list, FIELD_TYPE_STRUCT);
@@ -340,11 +341,31 @@ Type getExpType(Node* exp) {
         op[1] = getExpType(exp->sons->next);
         if(!typeComp(op[0], op[1]))
             printf("操作数类型不匹配: %d\n", exp->line);
+        Node *left_node = exp->sons;
+        if(left_node->type != T_ID && !strcmp(left_node->name, "ArrayEval") && !strcmp(left_node->name, "DOT"))
+            printf("赋值号左边出现一个只有右值的表达式: %d\n", left_node->line);
         return op[0];
     }
 
     if(!strcmp(exp->name, "DOT")) {
         // TODO: struct 取成员
+        Type struct_type = getExpType(exp->sons);
+        if(struct_type->kind != STRUCTURE) {
+            printf("非结构体使用dot操作符: %d\n", exp->line);
+        } else {
+            Node *field_node = exp->sons->next;
+            if(field_node->type != T_ID) {
+                // error
+            } else {
+                FieldList field_list = struct_type->u.structure;
+                for(; field_list != NULL; field_list = field_list->next) {
+                    if(!strcmp(field_node->val.type_str, field_list->name))
+                        return copyType(field_list->type);
+                }
+                printf("访问结构体中未定义的域: %d\n", field_node->line);
+            }
+        }
+        return struct_type;
     }
 
     RETURN_DEFAULT_EXP_TYPE: {
@@ -516,7 +537,8 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
                     if(head->type->kind == BASIC && head->dep != stack_top)
                         break;
                     printf("重定义: %d\n", line);
-                    name = "";
+                    name = malloc(30 * sizeof(char));
+                    sprintf(name, "__Field@%d", __field++);
                 }
             }
             break;
@@ -526,7 +548,8 @@ void insertSymbol(char* name, Type type, uint32_t kind, int line) {
                 if(!strcmp(name, head->name)) {
                     if(head->dep == stack_top) {
                         printf("结构体域重定义: %d\n", line);
-                        name = "";
+                        name = malloc(30 * sizeof(char));
+                        sprintf(name, "__Field@%d", __field++);
                     }
                 }
             }
