@@ -41,7 +41,7 @@ struct Type_ {
         enum {TYPE_INT, TYPE_FLOAT} basic; // 基本类型
         struct {Type base; Type elem; int size;} array; // 数组
         FieldList structure; // 结构体
-        Func func;
+        Func function;
     } u;
 };
 

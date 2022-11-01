@@ -7,4 +7,6 @@ Code/syntax.output
 Code/syntax.tab.c
 Code/syntax.tab.h
 Code/parser
+Code/test.cpp
 .vscode/
+Code/test.in

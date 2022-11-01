@@ -8,6 +8,7 @@ int yyparse();
 int yyrestart(FILE *);
 void print_AST(Node *, int);
 void start_semantics(Node *);
+void analyse(Node*);
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
     FILE *f = fopen(argv[1], "r");
@@ -18,9 +19,10 @@ int main(int argc, char **argv) {
     yyrestart(f);
     yyparse();
     if(!error) {
-        print_AST(root, 0);
-        printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
-        start_semantics(root);
+        // print_AST(root, 0);
+        // printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+        // start_semantics(root);
+        analyse(root);
     }
     return 0;
 }
