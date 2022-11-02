@@ -41,7 +41,7 @@
 %type  <node> VarDec FunDec VarList ParamDec
 %type  <node> CompSt StmtList Stmt
 %type  <node> DefList Def DecList Dec
-%type  <node> Exp Args
+%type  <node> Exp Term Args
 
 %%
 /* High-level Definitions */
@@ -395,46 +395,7 @@ Exp             : Exp ASSIGNOP Exp {
                     $2->sons = $1;
                     $1->next = $3;
                 }
-                | LP Exp RP {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
-                    $$ = $2;
-                }
-                | MINUS Exp {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
-                    $$ = $1; $1->sons = $2;
-                }
-                | NOT Exp {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 2, $1, $2);
-                    $$ = $1; $1->sons = $2;
-                }
-                | ID LP Args RP {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
-                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 2, $1, $3);
-                }
-                | ID LP RP {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
-                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 1, $1);
-                }
-                | Exp LB Exp RB {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 4, $1, $2, $3, $4);
-                    $$ = new_node("ArrayEval", T_NTERMINAL, @1.first_line, 2, $1, $3);
-                }
-                | Exp DOT ID {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);
-                    $$ = $2;
-                    $2->sons = $1;
-                    $1->next = $3;
-                }
-                | ID {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
-                    $$ = $1;
-                }
-                | INT  {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
-                    $$ = $1;
-                }
-                | FLOAT  {
-                    // $$ = new_node("Exp", T_NTERMINAL, @1.first_line, 1, $1);
+                | Term {
                     $$ = $1;
                 }
                 | Exp ASSIGNOP error {
@@ -492,6 +453,37 @@ Exp             : Exp ASSIGNOP Exp {
                 | Exp LB error SEMI {
                     yyerror("Missing ']' after a '['");
                     yyerrok;
+                }
+                ;
+Term            : LP Exp RP {
+                    $$ = $2;
+                }
+                | ID LP Args RP {
+                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 2, $1, $3);
+                }
+                | ID LP RP {
+                    $$ = new_node("FuncCall", T_NTERMINAL, @1.first_line, 1, $1);
+                }
+                | Term LB Exp RB {
+                    $$ = new_node("ArrayEval", T_NTERMINAL, @1.first_line, 2, $1, $3);
+                }
+                | Term DOT ID {
+                    $$ = $2, $2->sons = (struct Node *)$1, $1->next = (struct Node *)$3;
+                }
+                | MINUS Term {
+                    $$ = $1, $1->sons = (struct Node *)$2;
+                }
+                | NOT Term {
+                    $$ = $1, $1->sons = (struct Node *)$2;
+                }
+                | ID {
+                    $$ = $1;
+                }
+                | INT  {
+                    $$ = $1;
+                }
+                | FLOAT  {
+                    $$ = $1;
                 }
 Args            : Exp COMMA Args {
                     // $$ = new_node("Args", T_NTERMINAL, @1.first_line, 3, $1, $2, $3);

@@ -43,11 +43,13 @@ struct Type_ {
         FieldList structure; // 结构体
         Func function;
     } u;
+    uint32_t size;
 };
 
 struct FieldList_ {
     char *name; // 作用域名
     Type type; // 类型
+    uint32_t offset;
     FieldList next; // 下一个域
 };
 
@@ -67,4 +69,54 @@ struct SymbolList_ {
     int line; // 位置
     int dep; // 第几层
     uint32_t key; // 在表中的key
+};
+
+// 中间代码表示
+typedef struct Operand_* Operand;
+struct Operand_ {
+    enum {
+        OP_VAR,
+        OP_CONST,
+        OP_ADDR,    // &var
+        OP_DEREF,   // *var
+        OP_FUNC,    // CALL var
+    } kind;
+    union {
+        char *var_name;
+        int val;
+    } u;
+};
+
+struct InterCode {
+    enum {
+        IC_ADD,        // x := y + z
+        IC_SUB,        // x := y - z
+        IC_MUL,        // x := y * z
+        IC_DIV,        // x := y / z
+        IC_LABEL,      // LABEL x : 定义标号x。
+        IC_FUNCTION,   // FUNCTION f : 定义函数f。
+        IC_ASSIGN,     // x := y
+        IC_GOTO,       // GOTO x 无条件跳转至标号x。
+        IC_IFGOTO,     // IF x [relop] y GOTO z
+        IC_RETURN,     // RETURN x
+        IC_DEC,        // DEC x [size] 内存空间申请，大小为4的倍数。
+        IC_ARG,        // ARG x 传实参x。
+        IC_PARAM,      // PARAM x 函数参数声明。
+        IC_READ,       // READ x 从控制台读取x的值。
+        IC_WRITE,      // WRITE x 向控制台打印x的值。
+    } kind;
+    union {
+        struct {Operand right, left;} assign;
+        struct {Operand right, left, res;} binop;
+        struct {Operand op;} uniop;
+        struct {Operand op1, op2, target; char* relop;} cond_goto;
+        struct {Operand addr; uint32_t size;} declr;
+    } u;
+};
+
+typedef struct ICList_* ICList;
+
+struct ICList_ {
+    struct InterCode code;
+    ICList prev, next, tail;
 };

@@ -8,6 +8,8 @@
 #include "include/constant.h"
 
 extern int error;
+extern void append_ir(ICList);
+extern ICList translate_stmt(Node*);
 // Hash Table & Table Stack
 static SymbolList hash_table[HASH_TABLE_SIZE];
 static SymbolList frame_stack[FRAME_STACK_SIZE];
@@ -55,8 +57,11 @@ void analyse(Node *node) {
             for(Node *def = node->sons; def != NULL; def = def->next)
                 processDef(def->sons);
 
-            for(Node *stmt = node->next->sons; stmt != NULL; stmt = stmt->next)
-                processStmt(stmt->sons);
+            for(Node *stmt = node->next->sons; stmt != NULL; stmt = stmt->next) {
+                Node* stmt_inside = stmt->sons;
+                processStmt(stmt_inside);
+                append_ir(translate_stmt(stmt_inside));
+            }
         }
     }
 
@@ -155,9 +160,9 @@ void processDef(Node *node) {
     }
     else if(!strcmp(dec->name, "FunDec")) {
         Node *id = dec->sons, *param_dec_list = id->next, *param_dec;
-        Type type = calloc(1, sizeof(struct Type_));
+        Type type = malloc(SIZEOF(Type_));
         type->kind = FUNCTION;
-        type->u.function = calloc(1, sizeof(struct Func_));
+        type->u.function = malloc(SIZEOF(Func_));
         type->u.function->ret = getSpecifierType(specifier);
         if(param_dec_list != NULL)
             type->u.function->parameters = getFieldType(param_dec_list, FIELD_TYPE_PARAM);
@@ -298,7 +303,7 @@ void insertID(char *name, Type type, uint32_t kind, uint32_t line) {
                         break;
                     
                     s_error(3, line, head->name);
-                    name = calloc(30, sizeof(char));
+                    name = malloc(30 * sizeof(char));
                     sprintf(name, "AnonymousField@%d", anonymous_field_cnt++);
                 }
             }
@@ -309,7 +314,7 @@ void insertID(char *name, Type type, uint32_t kind, uint32_t line) {
                 if(!strcmp(name, head->name)) {
                     if(head->dep == st_top) {
                         s_error(15, line, head->name);
-                        name = calloc(30, sizeof(char));
+                        name = malloc(30 * sizeof(char));
                         sprintf(name, "AnonymousField@%d", anonymous_field_cnt++);
                     }
                     break;
@@ -330,7 +335,7 @@ void insertID(char *name, Type type, uint32_t kind, uint32_t line) {
             break;
     }
 
-    p_id = calloc(1, sizeof(struct SymbolList_));
+    p_id = malloc(SIZEOF(SymbolList_));
     p_id->name = name;
     p_id->dep = st_top;
     p_id->key = key;
@@ -426,7 +431,7 @@ uint8_t typeComp(Type a, Type b) {
 }
 
 Type getSpecifierType(Node *specifier) {
-    Type type = calloc(1, sizeof(struct Type_));
+    Type type = malloc(SIZEOF(Type_));
     if(specifier->type == T_TYPE) {
         type->kind = BASIC;
         if(!strcmp(specifier->val.type_str, "int")) {
@@ -435,11 +440,13 @@ Type getSpecifierType(Node *specifier) {
         else {
             type->u.basic = TYPE_FLOAT;
         }
+        type->size = 4;
     }
     else {
         assert(!strcmp(specifier->name, "StructSpecifier"));
 
         type->kind = STRUCTURE;
+        type->size = 0;
 
         Node *details = specifier->sons, *id = NULL, *def_list = NULL;
         if(details->type == T_ID) {
@@ -455,7 +462,7 @@ Type getSpecifierType(Node *specifier) {
         }
         else {
             // generate a name
-            name = calloc(30, sizeof(char));
+            name = malloc(30 * sizeof(char));
             sprintf(name, "AnonymousStruct@%d", anonymous_struct_cnt++);
         }
 
@@ -464,6 +471,9 @@ Type getSpecifierType(Node *specifier) {
             struct_state = 0;
             type->u.structure = getFieldType(def_list, FIELD_TYPE_STRUCT);
             struct_state = last_state;
+        }
+        for(FieldList field = type->u.structure; field != NULL; field = field->next) {
+            type->size += field->type->size;
         }
         switch (struct_state)
         {
@@ -514,11 +524,11 @@ Type getSpecifierType(Node *specifier) {
 Type getVarDecType(Node *specifier, Node *vardec, char **p_name) {
     Type type = getSpecifierType(specifier);
     while(vardec->type != T_ID) {
-        Type array_type = calloc(1, sizeof(struct Type_));
+        Type array_type = malloc(SIZEOF(Type_));
         array_type->kind = ARRAY;
         array_type->u.array.elem = type;
         array_type->u.array.size = vardec->next->val.type_int;
-
+        array_type->size = array_type->u.array.size * type->size;
         vardec = vardec->sons;
         type = array_type;
     }
@@ -534,7 +544,7 @@ Type getExpType(Node *exp) {
         goto RETURN_DEFAULT_EXP_TYPE;
     }
     if(exp->type == T_FLOAT) {
-        Type type = calloc(1, sizeof(struct Type_));
+        Type type = malloc(SIZEOF(Type_));
         type->kind = BASIC;
         type->u.basic = 1;
         return type;
@@ -577,7 +587,7 @@ Type getExpType(Node *exp) {
         param_type = p_id->type->u.function->parameters;
         while(param_type != NULL) {
             if(param_node == NULL) {
-                char *str = calloc(128, sizeof(char));
+                char *str = malloc(128 * sizeof(char));
                 type2str(p_id->type, str);
                 s_error(9, func_id_node->line, str);
                 free(str);
@@ -585,7 +595,7 @@ Type getExpType(Node *exp) {
             }
             Type exp_type = getExpType(param_node);
             if(0 != typeComp(param_type->type, exp_type)) {
-                char *str = calloc(128, sizeof(char));
+                char *str = malloc(128 * sizeof(char));
                 type2str(p_id->type, str);
                 s_error(9, func_id_node->line, str);
                 free(str);
@@ -597,7 +607,7 @@ Type getExpType(Node *exp) {
             param_type = param_type->next;
         }
         if(param_node != NULL) {
-            char *str = calloc(128, sizeof(char));
+            char *str = malloc(128 * sizeof(char));
             type2str(p_id->type, str);
             s_error(9, func_id_node->line, str);
             free(str);
@@ -712,7 +722,7 @@ Type getExpType(Node *exp) {
     }
 
     RETURN_DEFAULT_EXP_TYPE: { // Default type of exp
-        Type type = calloc(1, sizeof(struct Type_));
+        Type type = malloc(SIZEOF(Type_));
         type->kind = BASIC;
         type->u.basic = 0;
         return type;
@@ -753,7 +763,7 @@ FieldList getFieldType(Node *node, uint32_t field_type) {
     }
 
     for(SymbolList head = frame_stack[st_top], next; head != NULL; head = next) {
-        FieldList field = calloc(1, sizeof(struct FieldList_));
+        FieldList field = malloc(SIZEOF(FieldList_));
         field->name = head->name;
         field->next = field_list;
         field->type = head->type;
@@ -764,6 +774,11 @@ FieldList getFieldType(Node *node, uint32_t field_type) {
         free(head);
     }
     frame_stack[st_top--] = NULL;
+    uint32_t off = 0;
+    for(FieldList field = field_list; field != NULL; field = field->next) {
+        field->offset = off;
+        off += field->type->size;
+    }
 
     return field_list;
 }
@@ -809,8 +824,9 @@ Type copyType(Type type) {
     if(type == NULL)
         return NULL;
     
-    Type copied_type = calloc(1, sizeof(struct Type_));
+    Type copied_type = malloc(SIZEOF(Type_));
     copied_type->kind = type->kind;
+    copied_type->size = type->size;
     switch (type->kind)
     {
         case BASIC:
@@ -823,10 +839,10 @@ Type copyType(Type type) {
         case STRUCTURE: {
             FieldList *p_list = &(copied_type->u.structure), src = type->u.structure;
             while(src != NULL) {
-                (*p_list) = calloc(1, sizeof(struct FieldList_));
+                (*p_list) = malloc(SIZEOF(FieldList_));
                 (*p_list)->type = copyType(src->type);
                 (*p_list)->name = src->name;
-
+                (*p_list)->offset = src->offset;
                 p_list = &((*p_list)->next), src = src->next;
             }
             break;
@@ -835,7 +851,7 @@ Type copyType(Type type) {
             FieldList *p_list = &(copied_type->u.function->parameters), src = type->u.function->parameters;
             copied_type->u.function->ret = copyType(type->u.function->ret);
             while(src != NULL) {
-                (*p_list) = calloc(1, sizeof(struct FieldList_));
+                (*p_list) = malloc(SIZEOF(FieldList_));
                 (*p_list)->type = copyType(src->type);
 
                 p_list = &((*p_list)->next), src = src->next;
