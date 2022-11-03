@@ -13,6 +13,8 @@
 #define FIELDDEC            5
 #define FIELD_TYPE_PARAM    0
 #define FIELD_TYPE_STRUCT   1
+#define LEFT_VALUE          0
+#define RIGHT_VALUE         1
 
 #ifdef __SEMATICS_C__
 

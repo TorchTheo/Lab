@@ -42,7 +42,7 @@ struct Type_ {
     enum {BASIC, ARRAY, STRUCTURE, FUNCTION} kind;
     union {
         enum {TYPE_INT, TYPE_FLOAT} basic; // 基本类型
-        struct {Type base; Type elem; int size;} array; // 数组
+        struct {Type elem; int size;} array; // 数组
         FieldList structure; // 结构体
         Func function;
     } u;
@@ -113,7 +113,7 @@ struct InterCode {
         struct {Operand right, left, res;} binop;
         struct {Operand op;} uniop;
         struct {Operand op1, op2, target; char* relop;} cond_goto;
-        struct {Operand addr; uint32_t size;} declr;
+        struct {char *first_byte; uint32_t size;} declr;
     } u;
 };
 

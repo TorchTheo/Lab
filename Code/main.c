@@ -7,8 +7,12 @@ extern Node *root;
 int yyparse();
 int yyrestart(FILE *);
 void print_AST(Node *, int);
+
 void analyse(Node*);
-void print_ir();
+void init();
+
+void print_ic(ICList);
+ICList translate_deflist(Node*, Node*);
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
     FILE *f = fopen(argv[1], "r");
@@ -21,10 +25,11 @@ int main(int argc, char **argv) {
     if(!error) {
         // print_AST(root, 0);
         // printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
+        init();
         analyse(root);
     }
     if(!error) {
-        print_ir();
+        print_ic(translate_deflist(root, NULL));
     }
     return 0;
 }

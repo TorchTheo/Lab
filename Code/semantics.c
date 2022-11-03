@@ -9,8 +9,6 @@
 #include "include/constant.h"
 
 extern int error;
-extern void append_ir(ICList);
-extern ICList translate_stmt(Node*);
 // Hash Table & Table Stack
 static SymbolList hash_table[HASH_TABLE_SIZE];
 static SymbolList frame_stack[FRAME_STACK_SIZE];
@@ -24,25 +22,52 @@ static uint8_t struct_state = 0; // 0 is vardec, 1 is struct define
 static uint32_t anonymous_struct_cnt = 0;
 static uint32_t anonymous_field_cnt = 0;
 
-void analyse(Node *node);
-void s_error(int type, int line, ...);
-void type2str(Type type, char *str);
-void processDef(Node *node);
-void processStmt(Node *node);
-uint32_t hash_pjw(char *name);
-void insertID(char *name, Type type, uint32_t kind, uint32_t line);
+void init();
+void analyse(Node*);
+void s_error(int, int, ...);
+void type2str(Type, char*);
+void processDef(Node*);
+void processStmt(Node*);
+uint32_t hash_pjw(char*);
+void insertSymbol(char*, Type, uint32_t, uint32_t);
+Type lookUpSymbol(char*);
 void pushStack();
 void popStack();
 SymbolList getStackTop();
-uint8_t typeComp(Type a, Type b);
-Type getSpecifierType(Node *specifier);
-Type getVarDecType(Node *specifier, Node *vardec, char **name);
-Type getExpType(Node *exp);
-FieldList getFieldType(Node *node, uint32_t field_type);
-void deleteType(Type type);
-Type copyType(Type type);
+uint8_t typeComp(Type, Type);
+Type getSpecifierType(Node*);
+Type getVarDecType(Node*, Node*, char**);
+Type getExpType(Node*);
+FieldList getFieldType(Node*, uint32_t);
+void deleteType(Type);
+Type copyType(Type);
+void registerStruct(Node*);
 
-extern unsigned char good;
+
+void init() {
+    static struct Type_ read_type, write_type, static_int_type;
+
+    static_int_type.kind = BASIC;
+    static_int_type.u.basic = TYPE_INT;
+    static_int_type.size = 4;
+
+    static struct Func_ read_func_type;
+    read_type.kind = FUNCTION;
+    read_type.u.function = &read_func_type;
+    read_func_type.ret = &static_int_type;
+
+    static struct Func_ write_func_type;
+    static struct FieldList_ write_params_type;
+    write_type.kind = FUNCTION;
+    write_type.u.function = &read_func_type;
+    write_func_type.ret = &static_int_type;
+    write_func_type.parameters = &write_params_type;
+    write_params_type.name = "WRITE_PARAM";
+    write_params_type.type = &static_int_type;
+
+    insertSymbol("read", &read_type, FUNCDEF, (uint32_t)(-1));
+    insertSymbol("write", &write_type, FUNCDEF, (uint32_t)(-1));
+}
 
 void analyse(Node *node) {
     pushStack();
@@ -61,7 +86,6 @@ void analyse(Node *node) {
             for(Node *stmt = node->next->sons; stmt != NULL; stmt = stmt->next) {
                 Node* stmt_inside = stmt->sons;
                 processStmt(stmt_inside);
-                append_ir(translate_stmt(stmt_inside));
             }
         }
     }
@@ -154,10 +178,7 @@ void processDef(Node *node) {
 
     Node *specifier = node, *dec = node->next;
     if(dec == NULL) {
-        uint8_t last_state = struct_state;
-        struct_state = 1;
-        getSpecifierType(specifier);
-        struct_state = last_state;
+        registerStruct(specifier);
     }
     else if(!strcmp(dec->name, "FunDec")) {
         Node *id = dec->sons, *param_dec_list = id->next, *param_dec;
@@ -169,18 +190,17 @@ void processDef(Node *node) {
             type->u.function->parameters = getFieldType(param_dec_list, FIELD_TYPE_PARAM);
 
         if(dec->next == NULL)
-            insertID(id->val.type_str, type, FUNCDEC, dec->line);
+            insertSymbol(id->val.type_str, type, FUNCDEC, dec->line);
         else {
-            Node *def_list = dec->next->sons, *stmt_list = def_list->next;
             FieldList param_field = type->u.function->parameters;
-            insertID(id->val.type_str, type, FUNCDEF, dec->line);
+            insertSymbol(id->val.type_str, type, FUNCDEF, dec->line);
             pushStack();
             if(param_dec_list != NULL) {
                 param_dec = id->next->sons;
                 for(; param_dec != NULL; param_dec = param_dec->next, param_field = param_field->next)
-                    insertID(param_field->name, copyType(param_field->type), VARDEC, param_dec->line);
+                    insertSymbol(param_field->name, copyType(param_field->type), VARDEC, param_dec->line);
             }
-
+            Node *def_list = dec->next->sons;
             ret_type = type->u.function->ret;
             st_top--;
             analyse(def_list);
@@ -192,7 +212,7 @@ void processDef(Node *node) {
             if(!strcmp(dec->name, "VarDec")) {
                 Node *vardec = dec->sons;
                 char *name;
-                insertID(name, getVarDecType(specifier, vardec, &name), VARDEC, vardec->line);
+                insertSymbol(name, getVarDecType(specifier, vardec, &name), VARDEC, vardec->line);
             }
             else {
                 Type exp_type = getExpType(dec);
@@ -252,8 +272,9 @@ uint32_t hash_pjw(char *name) {
     return val;
 }
 
-void insertID(char *name, Type type, uint32_t kind, uint32_t line) {
-    assert(st_top);
+void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
+    if(strcmp(name, "read") && strcmp(name, "write"))
+        assert(st_top);
 
     uint32_t key = hash_pjw(name);
     SymbolList p_id;
@@ -359,6 +380,13 @@ void insertID(char *name, Type type, uint32_t kind, uint32_t line) {
     hash_table[key] = p_id;
     p_id->fs_next = frame_stack[st_top];
     frame_stack[st_top] = p_id;
+}
+
+Type lookUpSymbol(char* name) {
+    for(SymbolList head = hash_table[hash_pjw(name)]; head != NULL; head = head->tb_next)
+        if(!strcmp(name, head->name))
+            return head->type;
+    return NULL;
 }
 
 void pushStack() {
@@ -491,7 +519,7 @@ Type getSpecifierType(Node *specifier) {
                     s_error(17, specifier->line, name);
                 }
                 else { // struct A { int a; } var;
-                    insertID(name, copyType(type), STRUCTDEF, specifier->line);
+                    insertSymbol(name, copyType(type), STRUCTDEF, specifier->line);
                 }
             }
             else {
@@ -511,7 +539,7 @@ Type getSpecifierType(Node *specifier) {
             break;
         }
         case 1:
-            insertID(name, type, STRUCTDEF, specifier->line);
+            insertSymbol(name, type, STRUCTDEF, specifier->line);
             break;
 
         default:
@@ -746,10 +774,10 @@ FieldList getFieldType(Node *node, uint32_t field_type) {
                 switch (field_type)
                 {
                     case FIELD_TYPE_PARAM:
-                        insertID(name, getVarDecType(specifier, vardec, &name), PARAMDEC, vardec->line);
+                        insertSymbol(name, getVarDecType(specifier, vardec, &name), PARAMDEC, vardec->line);
                         break;
                     case FIELD_TYPE_STRUCT:
-                        insertID(name, getVarDecType(specifier, vardec, &name), FIELDDEC, vardec->line);
+                        insertSymbol(name, getVarDecType(specifier, vardec, &name), FIELDDEC, vardec->line);
                         break;
 
                     default:
@@ -764,12 +792,13 @@ FieldList getFieldType(Node *node, uint32_t field_type) {
     }
 
     for(SymbolList head = frame_stack[st_top], next; head != NULL; head = next) {
-        FieldList field = malloc(SIZEOF(FieldList_));
-        field->name = head->name;
-        field->next = field_list;
-        field->type = head->type;
-        field_list = field;
-
+        if(head->func_type != DEF) {
+            FieldList field = malloc(SIZEOF(FieldList_));
+            field->name = head->name;
+            field->next = field_list;
+            field->type = head->type;
+            field_list = field;
+        }
         next = head->fs_next;
         hash_table[head->key] = head->tb_next;
         free(head);
@@ -865,4 +894,11 @@ Type copyType(Type type) {
     }
 
     return copied_type;
+}
+
+void registerStruct(Node* specifier) {
+    uint8_t last_state = struct_state;
+    struct_state = 1;
+    getSpecifierType(specifier);
+    struct_state = last_state;
 }

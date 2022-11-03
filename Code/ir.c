@@ -8,14 +8,24 @@
 #include "include/constant.h"
 #include "include/type.h"
 
+extern void registerStruct(Node*);
+extern Type lookUpSymbol(char*);
+extern SymbolList getStackTop();
+extern Type getExpType(Node*);
+extern Type getVarDecType(Node*, Node*, char**);
+extern void pushStack();
+extern void popStack();
+extern void insertSymbol(char*, Type, uint32_t, uint32_t);
+
 static uint32_t label_cnt = 0;
 static uint32_t temp_var_cnt = 0;
-static ICList ir = NULL;
+static uint8_t value_type = RIGHT_VALUE;
 
 
 Operand new_var(char*);
 Operand new_func(char*);
 Operand new_const(int);
+Operand new_addr(char*);
 ICList new_ic(int, ...);
 char *new_label_name();
 char *get_temp_var_name();
@@ -23,10 +33,10 @@ ICList append(ICList, ICList);
 ICList translate_exp(Node*, char*);
 ICList translate_cond(Node*, char*, char*);
 ICList translate_stmt(Node*);
-ICList translate_compst(Node*);
-void append_ir(ICList);
+ICList translate_def(Node*);
+ICList translate_deflist(Node*, Node*);
 void print_operand(Operand);
-void print_ir();
+void print_ic(ICList);
 
 Operand new_var(char *name) {
     Operand ret = malloc(SIZEOF(Operand_));
@@ -49,6 +59,13 @@ Operand new_const(int val) {
     Operand ret = malloc(SIZEOF(Operand_));
     ret->kind = OP_CONST;
     ret->u.val = val;
+    return ret;
+}
+
+Operand new_addr(char* name) {
+    Operand ret = malloc(SIZEOF(Operand_));
+    ret->kind = OP_ADDR;
+    ret->u.var_name = name;
     return ret;
 }
 
@@ -78,6 +95,10 @@ ICList new_ic(int code_type, ...) {
             ic->code.u.cond_goto.op2 = va_arg(list, Operand);
             ic->code.u.cond_goto.target = new_var(va_arg(list, char *));
             ic->code.u.cond_goto.relop = va_arg(list, char*);
+            break;
+        case IC_DEC:
+            ic->code.u.declr.first_byte = va_arg(list, char*);
+            ic->code.u.declr.size = va_arg(list, uint32_t);
             break;
         default:
             break;
@@ -128,6 +149,9 @@ ICList translate_exp(Node* exp, char* place) {
         // ic->code.u.assign.left = new_var(place);
         // ic->code.u.assign.right = new_var(exp->val.type_str);
         // ic->prev = ic->next = NULL, ic->tail = ic;
+        Type id_type = lookUpSymbol(exp->val.type_str);
+        if(id_type->kind != BASIC) 
+            return new_ic(IC_ASSIGN, new_var(place), new_addr(exp->val.type_str));
         return new_ic(IC_ASSIGN, new_var(place), new_var(exp->val.type_str));
     }
     if(!strcmp(exp->name, "FuncCall")) {
@@ -153,7 +177,27 @@ ICList translate_exp(Node* exp, char* place) {
         }
     }
     if(!strcmp(exp->name, "ArrayEval")) {
+        Node *arr_node = (Node *)(exp->sons), *ind_node = (Node *)(arr_node->next);
+        Type arr_type = getExpType(arr_node);
+        Operand addr = new_var(NULL), index = new_var(NULL);
+        ICList get_addr, get_index, ret;
 
+        uint8_t last_value_type = value_type;
+        value_type = LEFT_VALUE;
+        get_addr = translate_exp(arr_node, addr->u.var_name);
+        value_type = last_value_type;
+
+        get_index = translate_exp(ind_node, index->u.var_name);
+        ret = append(
+            new_ic(IC_MUL, new_var(index->u.var_name), new_var(index->u.var_name), new_const(arr_type->u.array.elem->size)),
+            append(
+                new_ic(IC_ADD, new_var(addr->u.var_name), new_var(addr->u.var_name), index),
+                new_ic(IC_ASSIGN, new_var(place), addr)
+            )
+        );
+        if(value_type == RIGHT_VALUE)
+            addr->kind = OP_DEREF;
+        return append(append(get_addr, get_index), ret);
     }
 
     if(!strcmp(exp->name, "PLUS")) {
@@ -212,17 +256,47 @@ ICList translate_exp(Node* exp, char* place) {
 
     if(!strcmp(exp->name, "ASSIGNOP")) {
         Node *left = exp->sons, *right = exp->sons->next;
+        Operand right_value = new_var(NULL);
+        ICList assign_to_place, get_right = translate_exp(right, right_value->u.var_name);
         if(left->type == T_ID) {
-            Operand temp = new_var(NULL);
-            ICList get_right = translate_exp(right, temp->u.var_name),
-                   assign_to_place = append(new_ic(IC_ASSIGN, new_var(left->val.type_str), temp), 
-                                            new_ic(IC_ASSIGN, new_var(place), new_var(left->val.type_str)));
+            assign_to_place = append(new_ic(IC_ASSIGN, new_var(left->val.type_str), right_value), 
+                                    new_ic(IC_ASSIGN, new_var(place), new_var(right_value->u.var_name)));
             return append(get_right, assign_to_place);
+        } else {
+            Operand addr = new_var(NULL);
+            uint32_t last_value_type = value_type;
+            value_type = LEFT_VALUE;
+            addr->kind = OP_DEREF;
+            assign_to_place = append(
+                translate_exp(left, addr->u.var_name),
+                append(
+                    new_ic(IC_ASSIGN, addr, right_value),
+                    new_ic(IC_ASSIGN, new_var(place), new_var(right_value->u.var_name))
+                )
+            );
         }
+        return append(get_right, assign_to_place);
     }
 
     if(!strcmp(exp->name, "DOT")) {
-
+        Node *struct_node = exp->sons, *field_node = struct_node->next;
+        Type struct_type = getExpType(struct_node);
+        FieldList field_list = struct_type->u.structure;
+        Operand addr = new_var(NULL);
+        ICList get_addr;
+        uint8_t last_value_type = value_type;
+        value_type = LEFT_VALUE;
+        get_addr = translate_exp(struct_node, addr->u.var_name);
+        value_type = last_value_type;
+        for(; field_list != NULL; field_list = field_list->next) {
+            if(!strcmp(field_list->name, field_node->val.type_str)) {
+                get_addr = append(get_addr, new_ic(IC_ADD, new_var(addr->u.var_name), new_const(field_list->offset), new_var(addr->u.var_name)));
+                if(value_type == RIGHT_VALUE)
+                    addr->kind = OP_DEREF;
+                break;
+            }
+        }
+        return append(get_addr, new_ic(IC_ASSIGN, new_var(place), addr));
     }
 }
 
@@ -251,7 +325,7 @@ ICList translate_cond(Node* exp, char* label_true, char* label_false) {
 
 ICList translate_stmt(Node* stmt) {
     if(!strcmp(stmt->name, "CompSt"))
-        return translate_compst(stmt);
+        return translate_deflist(stmt->sons, NULL);
     else if(!strcmp(stmt->name, "RETURN")) {
         Operand t1 = new_var(NULL);
         ICList code1 = translate_exp(stmt->sons, t1->u.var_name);
@@ -289,15 +363,71 @@ ICList translate_stmt(Node* stmt) {
         return translate_exp(stmt, NULL);
 }
 
-ICList translate_compst(Node* compst) {
-    return NULL;
+ICList translate_def(Node* node) {
+    ICList ic = NULL;
+    Node *specifier = node, *dec = node->next;
+    if(dec == NULL) {
+        // struct
+        registerStruct(specifier);
+    } else if(!strcmp(dec->name, "FunDec")) {
+        Node *symbol = node->sons, *param_dec_list = symbol->next;
+        if(dec->next == NULL) {
+            // 函数声明
+        }
+        else {
+            ic = append(ic, new_ic(IC_FUNCTION, symbol->val.type_str));
+            Node *def_list = dec->next->sons;
+            ic = append(ic, translate_deflist(def_list, param_dec_list));
+        }
+    } else {
+        // 变量声明
+        for(;dec != NULL; dec = dec->next) {
+            if(!strcmp(dec->name, "VarDec")) {
+                Node *var_dec = dec->sons;
+                char *name;
+                Type t = getVarDecType(specifier, var_dec, &name);
+                insertSymbol(name, t, VARDEC, var_dec->line);
+                if(t->kind != BASIC) {
+                    ic = append(ic, new_ic(IC_DEC, name, t->size));
+                }
+            } else {
+                // var = exp
+                ic = append(ic, translate_exp(dec, getStackTop()->name));
+            }
+        }
+    }
+    return ic;
 }
 
-void append_ir(ICList ic) {
-    if(ir == NULL)
-        ir = ic;
-    else
-        ir = append(ir, ic);
+ICList translate_deflist(Node* def_list, Node* param_list) {
+    ICList ic = NULL;
+    pushStack();
+    if(param_list != NULL) {
+        Node *param_def = param_list->sons;
+        for(; param_def != NULL; param_def = param_def->next) {
+            Node *param_specifier = param_def->sons, *param_dec = param_specifier->next;
+            for(; param_dec != NULL; param_dec = param_dec->next) {
+                Node *var_dec = param_dec->sons;
+                char *name;
+                insertSymbol(name, getVarDecType(param_specifier, var_dec, &name), PARAMDEC, var_dec->line);
+                ic = append(ic, new_ic(IC_PARAM, new_var(name)));
+            }
+        }
+    }
+    if(!strcmp(def_list->name, "ExtDef")) {
+        for(; def_list != NULL; def_list = def_list->next)
+            ic = append(ic, translate_def(def_list->sons));
+    } else if(!strcmp(def_list->name, "DefList")) {
+        Node *def = def_list->sons;
+        for(; def != NULL; def = def->next)
+            ic = append(ic, translate_def(def->sons));
+        Node *stmt = def_list->next->sons;
+        for(; stmt != NULL; stmt = stmt->next) 
+            ic = append(ic, translate_stmt(stmt->sons));
+    }
+
+    popStack();
+    return ic;
 }
 
 void print_operand(Operand op) {
@@ -314,13 +444,16 @@ void print_operand(Operand op) {
         case OP_FUNC:
             printf("CALL %s", op->u.var_name);
             break;
+        case OP_DEREF:
+            printf("*%s", op->u.var_name);
+            break;
         default:
             break;
     }
 }
 
-void print_ir() {
-    for(ICList head = ir; head != NULL; head = head->next) {
+void print_ic(ICList ic) {
+    for(ICList head = ic; head != NULL; head = head->next) {
         switch (head->code.kind)
         {
             case IC_ASSIGN: {
@@ -356,6 +489,9 @@ void print_ir() {
                 print_operand(head->code.u.cond_goto.op2);
                 printf(" GOTO ");
                 print_operand(head->code.u.cond_goto.target);
+                break;
+            case IC_DEC:
+                printf("DEC %s %u", head->code.u.declr.first_byte, head->code.u.declr.size);
                 break;
             default:
                 printf("Padding!");
