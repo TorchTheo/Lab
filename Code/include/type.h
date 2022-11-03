@@ -1,3 +1,6 @@
+#ifndef __TYPE_H__
+#define __TYPE_H__
+
 typedef unsigned int uint32_t;
 typedef unsigned char uint8_t;
 typedef unsigned char boolean;
@@ -120,3 +123,5 @@ struct ICList_ {
     struct InterCode code;
     ICList prev, next, tail;
 };
+
+#endif

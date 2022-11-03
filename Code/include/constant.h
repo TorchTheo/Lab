@@ -1,3 +1,6 @@
+#ifndef __CONSTANT_H__
+#define __CONSTANT_H__
+
 #define HASH_TABLE_SIZE     0x4000
 #define FRAME_STACK_SIZE    0x1000
 #define VARDEC              0
@@ -10,6 +13,8 @@
 #define FIELDDEC            5
 #define FIELD_TYPE_PARAM    0
 #define FIELD_TYPE_STRUCT   1
+
+#ifdef __SEMATICS_C__
 
 char *formats[] = {
     /* 00 */ "Error type %d at Line %d: Unknown error.\n",
@@ -33,3 +38,24 @@ char *formats[] = {
     /* 18 */ "Error type %d at Line %d: Undefined function \"%s\".\n", // With declaration but not definition
     /* 19 */ "Error type %d at Line %d: Inconsistent declaration of function \"%s\".\n",
 };
+
+#endif
+
+#ifdef __IR_C__
+static const char *icode_name[] = {
+    "", "", "", "", 
+    "LABEL",
+    "FUNCTION",
+    "", 
+    "GOTO",
+    "", 
+    "RETURN",
+    "", 
+    "ARG",
+    "PARAM",
+    "READ",
+    "WRITE",
+};
+#endif
+
+#endif

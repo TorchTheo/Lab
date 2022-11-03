@@ -1,29 +1,17 @@
+#define __IR_C__
 #include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <assert.h>
 #include <stdarg.h>
 
-// #include "include/constant.h"
+#include "include/constant.h"
 #include "include/type.h"
 
 static uint32_t label_cnt = 0;
 static uint32_t temp_var_cnt = 0;
 static ICList ir = NULL;
-static const char *icode_name[] = {
-    "", "", "", "", 
-    "LABEL",
-    "FUNCTION",
-    "", 
-    "GOTO",
-    "", 
-    "RETURN",
-    "", 
-    "ARG",
-    "PARAM",
-    "READ",
-    "WRITE",
-};
+
 
 Operand new_var(char*);
 Operand new_func(char*);
