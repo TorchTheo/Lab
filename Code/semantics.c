@@ -59,7 +59,7 @@ void init() {
     static struct Func_ write_func_type;
     static struct FieldList_ write_params_type;
     write_type.kind = FUNCTION;
-    write_type.u.function = &read_func_type;
+    write_type.u.function = &write_func_type;
     write_func_type.ret = &static_int_type;
     write_func_type.parameters = &write_params_type;
     write_params_type.name = "WRITE_PARAM";
@@ -590,6 +590,9 @@ Type getExpType(Node *exp) {
         if(p_id == NULL) {
             s_error(1, exp->line, exp->val.type_str);
             goto RETURN_DEFAULT_EXP_TYPE;
+        }
+        if(p_id->type->kind == POINTER) {
+            return copyType(p_id->type->u.pointer);
         }
         return copyType(p_id->type);
     }

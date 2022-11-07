@@ -7,12 +7,17 @@
 
 #include "include/constant.h"
 #include "include/type.h"
+#include "include/utils/hashtable.h"
+#include "include/utils/optimize.h"
 
+extern FILE* file_out;
 extern void registerStruct(Node*);
 extern Type lookUpSymbol(char*);
 extern SymbolList getStackTop();
 extern Type getExpType(Node*);
 extern Type getVarDecType(Node*, Node*, char**);
+extern Type getSpecifierType(Node*);
+extern FieldList getFieldType(Node*, uint32_t);
 extern void pushStack();
 extern void popStack();
 extern void insertSymbol(char*, Type, uint32_t, uint32_t);
@@ -20,8 +25,9 @@ extern void insertSymbol(char*, Type, uint32_t, uint32_t);
 static uint32_t label_cnt = 0;
 static uint32_t temp_var_cnt = 0;
 static uint8_t value_type = RIGHT_VALUE;
+static uint8_t print_stdout = TRUE;
 
-
+void start_ir(Node*);
 Operand new_var(char*);
 Operand new_func(char*);
 Operand new_const(int);
@@ -35,8 +41,18 @@ ICList translate_cond(Node*, char*, char*);
 ICList translate_stmt(Node*);
 ICList translate_def(Node*);
 ICList translate_deflist(Node*, Node*);
+Operand copy_operand(Operand);
+ICList optimizeICList(ICList);
 void print_operand(Operand);
 void print_ic(ICList);
+
+void start_ir(Node *root) {
+    if(file_out != NULL) {
+        print_stdout = FALSE;
+    }
+    // print_ic(translate_deflist(root, NULL));
+    print_ic(optimizeICList(translate_deflist(root, NULL)));
+}
 
 Operand new_var(char *name) {
     Operand ret = malloc(SIZEOF(Operand_));
@@ -150,7 +166,7 @@ ICList translate_exp(Node* exp, char* place) {
         // ic->code.u.assign.right = new_var(exp->val.type_str);
         // ic->prev = ic->next = NULL, ic->tail = ic;
         Type id_type = lookUpSymbol(exp->val.type_str);
-        if(id_type->kind != BASIC) 
+        if(id_type->kind != BASIC && id_type->kind != POINTER) 
             return new_ic(IC_ASSIGN, new_var(place), new_addr(exp->val.type_str));
         return new_ic(IC_ASSIGN, new_var(place), new_var(exp->val.type_str));
     }
@@ -165,8 +181,13 @@ ICList translate_exp(Node* exp, char* place) {
             ICList code1 = NULL, code2 = NULL;
             while(args_node != NULL) {
                 Operand arg = new_var(NULL);
+                uint8_t last_value_type = value_type;
+                Type arg_type = getExpType(args_node);
+                if(arg_type->kind != BASIC) 
+                    value_type = LEFT_VALUE;
                 code1 = append(code1, translate_exp(args_node, arg->u.var_name));
                 code2 = append(code2, new_ic(IC_ARG, arg));
+                value_type = last_value_type;
                 args_node = args_node->next;
             }
             if(!strcmp(func_name, "write")) {
@@ -370,11 +391,18 @@ ICList translate_def(Node* node) {
         // struct
         registerStruct(specifier);
     } else if(!strcmp(dec->name, "FunDec")) {
-        Node *symbol = node->sons, *param_dec_list = symbol->next;
+        Node *symbol = dec->sons, *param_dec_list = symbol->next;
+        Type type = malloc(SIZEOF(Type_));
+        type->kind = FUNCTION;
+        type->u.function = malloc(SIZEOF(Func_));
+        type->u.function->ret = getSpecifierType(specifier);
+        if(param_dec_list != NULL)
+            type->u.function->parameters = getFieldType(param_dec_list, VARDEC);
         if(dec->next == NULL) {
             // 函数声明
         }
         else {
+            insertSymbol(symbol->val.type_str, type, FUNCDEF, symbol->line);
             ic = append(ic, new_ic(IC_FUNCTION, symbol->val.type_str));
             Node *def_list = dec->next->sons;
             ic = append(ic, translate_deflist(def_list, param_dec_list));
@@ -409,7 +437,14 @@ ICList translate_deflist(Node* def_list, Node* param_list) {
             for(; param_dec != NULL; param_dec = param_dec->next) {
                 Node *var_dec = param_dec->sons;
                 char *name;
-                insertSymbol(name, getVarDecType(param_specifier, var_dec, &name), PARAMDEC, var_dec->line);
+                Type param_type = getVarDecType(param_specifier, var_dec, &name);
+                if(param_type->kind != BASIC) {
+                    Type pointer_type = malloc(SIZEOF(Type_));
+                    pointer_type->kind = POINTER;
+                    pointer_type->size = 4;
+                    pointer_type->u.pointer = param_type;
+                }
+                insertSymbol(name, param_type, PARAMDEC, var_dec->line);
                 ic = append(ic, new_ic(IC_PARAM, new_var(name)));
             }
         }
@@ -430,23 +465,228 @@ ICList translate_deflist(Node* def_list, Node* param_list) {
     return ic;
 }
 
+Operand copy_operand(Operand op) {
+    Operand ret = malloc(SIZEOF(Operand_));
+    ret->kind = op->kind;
+    ret->u = op->u;
+    return ret;
+}
+
+ICList optimizeICList(ICList icode) {
+    int times = 5;
+    while(times--) {
+        for(ICList line = icode; line != NULL; line = line->next) {
+            switch(line->code.kind) {
+                case IC_ASSIGN: {
+                    Operand left = line->code.u.assign.left, right = line->code.u.assign.right;
+                    if(left->kind == OP_VAR && left->u.var_name == NULL ||
+                       left->kind == OP_VAR && right->kind == OP_VAR && !strcmp(left->u.var_name, right->u.var_name))
+                       DELETE_LINE
+                    if(right->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.assign.right, right);
+                    }
+                    break;
+                }
+                case IC_ADD: case IC_SUB: case IC_MUL: case IC_DIV:  {
+                    Operand res = line->code.u.binop.res, left = line->code.u.binop.left, right = line->code.u.binop.right;
+                    if(left->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.binop.left, left);
+                    }
+                    if(right->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.binop.right, right);
+                    }
+                    if(left->kind == OP_CONST && right->kind == OP_CONST) {
+                        line->code.u.assign.left = res;
+                        line->code.kind == IC_ASSIGN;
+                        switch(line->code.kind) {
+                            case IC_ADD:
+                                line->code.u.assign.right = new_const(left->u.val + right->u.val);
+                            case IC_SUB:
+                                line->code.u.assign.right = new_const(left->u.val - right->u.val);
+                            case IC_MUL:
+                                line->code.u.assign.right = new_const(left->u.val * right->u.val);
+                            case IC_DIV:
+                                line->code.u.assign.right = new_const(left->u.val / right->u.val);
+                        }
+                        free(left);
+                        free(right);
+                        break;
+                    }
+                    if(left->kind == OP_CONST && left->u.val == 0 && line->code.kind != IC_SUB) {
+                        line->code.kind = IC_ASSIGN;
+                        line->code.u.assign.left = res;
+                        switch(line->code.kind) {
+                            case IC_ADD:
+                                line->code.u.assign.right = right;
+                                break;
+                            case IC_MUL: case IC_DIV:
+                                line->code.u.assign.right = new_const(0);
+                                free(right);
+                                break;
+                        }
+                        free(left);
+                        break;
+                    }
+                    if(right->kind == OP_CONST && right->u.val == 0) {
+                        line->code.kind = IC_ASSIGN;
+                        line->code.u.assign.left = res;
+                        switch(line->code.kind) {
+                            case IC_ADD: case IC_SUB:
+                                line->code.u.assign.right = left;
+                                break;
+                            case IC_MUL:
+                                line->code.u.assign.right = new_const(0);
+                                free(left);
+                                break;
+                            case IC_DIV:
+                                assert(0);
+                                break;
+                        }
+                        free(right);
+                        break;
+                    }
+                    if(left->kind == OP_CONST && left->u.val == 1 && line->code.kind == IC_MUL) {
+                        line->code.kind = IC_ASSIGN;
+                        line->code.u.assign.left = res;
+                        line->code.u.assign.right = right;
+                        free(left);
+                        break;
+                    }
+                    if(right->kind == OP_CONST && right->u.val == 1 && (line->code.kind == IC_MUL || line->code.kind == IC_DIV)) {
+                        line->code.kind = IC_ASSIGN;
+                        line->code.u.assign.left = res;
+                        line->code.u.assign.right = left;
+                        free(right);
+                        break;
+                    }
+                    break;
+                }
+                case IC_RETURN: case IC_ARG: case IC_WRITE: {
+                    Operand op = line->code.u.uniop.op;
+                    if(op->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.uniop.op, op);
+                    }
+                    break;
+                }
+                case IC_IFGOTO: {
+                    Operand op1 = line->code.u.cond_goto.op1, op2 = line->code.u.cond_goto.op2;
+                    if(op1->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.cond_goto.op1, op1);
+                    }
+                    if(op2->kind == OP_VAR) {
+                        FIND_LAST_ASSIGN(u.cond_goto.op2, op2);
+                    }
+                    break;
+                }
+                default:
+                    break;
+            }
+            if(line == NULL)
+                break;
+        }
+    }
+    for(ICList line = icode; line != NULL; line = line->next) {
+        switch(line->code.kind) {
+            case IC_ASSIGN: {
+                Operand left = line->code.u.assign.left, right = line->code.u.assign.right;
+                COUNT_USED_VARIABLE(left);
+                COUNT_USED_VARIABLE(right);
+                break;
+            }
+            case IC_ADD: case IC_SUB: case IC_MUL: case IC_DIV: {
+                Operand res = line->code.u.binop.res, left = line->code.u.binop.left, right = line->code.u.binop.right;
+                COUNT_USED_VARIABLE(res);
+                COUNT_USED_VARIABLE(left);
+                COUNT_USED_VARIABLE(right);
+                break;
+            }
+            case IC_RETURN: case IC_ARG: case IC_WRITE: case IC_READ: case IC_PARAM: {
+                Operand op = line->code.u.uniop.op;
+                COUNT_USED_VARIABLE(op);
+                break;
+            }
+            case IC_DEC: {
+                Operand first_byte = new_var(line->code.u.declr.first_byte);
+                COUNT_USED_VARIABLE(first_byte);
+                free(first_byte);
+                break;
+            }
+            case IC_IFGOTO: {
+                Operand op1 = line->code.u.cond_goto.op1, op2 = line->code.u.cond_goto.op2;
+                COUNT_USED_VARIABLE(op1);
+                COUNT_USED_VARIABLE(op2);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    for(ICList line = icode; line != NULL; line = line->next) {
+        switch(line->code.kind) {
+            case IC_ASSIGN: {
+                Operand left = line->code.u.assign.left;
+                if(left->kind == OP_VAR && get_value(left->u.var_name) <= 1)
+                    DELETE_LINE;
+                break;
+            }
+            case IC_DEC: {
+                char *var_name = line->code.u.declr.first_byte;
+                if(get_value(var_name) <= 1) {                                                                       
+                    ICList prev_line = line->prev;                                                      
+                    if(line->prev != NULL)                                                              
+                        line->prev->next = line->next;                                                  
+                    if(line->next != NULL)                                                              
+                        line->next->prev = line->prev;                                                  
+                    free(line);                                                                         
+                    line = prev_line;                                                                   
+                    break;                                                                              
+                }
+                break;
+            }
+        }
+        if(line == NULL)
+            break;
+    }
+    return icode;
+}
+
 void print_operand(Operand op) {
     switch(op->kind) {
-        case OP_VAR:
-            printf("%s", op->u.var_name);
+        case OP_VAR: {
+            if(print_stdout)
+                printf("%s", op->u.var_name);
+            else
+                fprintf(file_out, "%s", op->u.var_name);
             break;
-        case OP_CONST:
-            printf("#%d", op->u.val);
+        }
+        case OP_CONST: {
+            if(print_stdout)
+                printf("#%d", op->u.val);
+            else
+                fprintf(file_out, "#%d", op->u.val);
             break;
-        case OP_ADDR:
-            printf("&%s", op->u.var_name);
+        }
+        case OP_ADDR: {
+            if(print_stdout)
+                printf("&%s", op->u.var_name);
+            else
+                fprintf(file_out, "&%s", op->u.var_name);
             break;
-        case OP_FUNC:
-            printf("CALL %s", op->u.var_name);
+        }
+        case OP_FUNC: {
+            if(print_stdout)
+                printf("CALL %s", op->u.var_name);
+            else
+                fprintf(file_out, "CALL %s", op->u.var_name);
             break;
-        case OP_DEREF:
-            printf("*%s", op->u.var_name);
+        }
+        case OP_DEREF: {
+            if(print_stdout)
+                printf("*%s", op->u.var_name);
+            else
+                fprintf(file_out, "*%s", op->u.var_name);
             break;
+        }
         default:
             break;
     }
@@ -460,43 +700,84 @@ void print_ic(ICList ic) {
                 Operand left = head->code.u.assign.left, right = head->code.u.assign.right;
                 assert(left->u.var_name != NULL);
                 print_operand(left);
-                printf(" := ");
+                if(print_stdout)
+                    printf(" := ");
+                else
+                    fprintf(file_out, " := ");
                 print_operand(right);
                 break;
             }
             case IC_ADD: case IC_SUB: case IC_MUL: case IC_DIV: {
                 Operand left = head->code.u.binop.left, right = head->code.u.binop.right, res = head->code.u.binop.res;
                 print_operand(res);
-                printf(" := ");
+                if(print_stdout)
+                    printf(" := ");
+                else
+                    fprintf(file_out, " := ");
                 print_operand(left);
-                printf(" %c ", "+-*/"[head->code.kind]);
+                if(print_stdout)
+                    printf(" %c ", "+-*/"[head->code.kind]);
+                else
+                    fprintf(file_out, " %c ", "+-*/"[head->code.kind]);
                 print_operand(right);
                 break;
             }
-            case IC_LABEL: case IC_FUNCTION:
-                printf("%s ", icode_name[head->code.kind]);
+            case IC_LABEL: case IC_FUNCTION: {
+                if(print_stdout)
+                    printf("%s ", icode_name[head->code.kind]);
+                else
+                    fprintf(file_out, "%s ", icode_name[head->code.kind]);
                 print_operand(head->code.u.uniop.op);
-                printf(" :");
+                if(print_stdout)
+                    printf(" :");
+                else
+                    fprintf(file_out, " :");
                 break;
-            case IC_GOTO: case IC_RETURN: case IC_ARG: case IC_PARAM: case IC_READ: case IC_WRITE:
-                printf("%s ", icode_name[head->code.kind]);
+            }
+            case IC_GOTO: case IC_RETURN: case IC_ARG: case IC_PARAM: case IC_READ: case IC_WRITE: {
+                if(print_stdout)
+                    printf("%s ", icode_name[head->code.kind]);
+                else
+                    fprintf(file_out, "%s ", icode_name[head->code.kind]);
                 print_operand(head->code.u.uniop.op);
                 break;
-            case IC_IFGOTO:
-                printf("IF ");
+            }
+            case IC_IFGOTO: {
+                if(print_stdout)
+                    printf("IF ");
+                else
+                    fprintf(file_out, "IF ");
                 print_operand(head->code.u.cond_goto.op1);
-                printf(" %s ", head->code.u.cond_goto.relop);
+                if(print_stdout)
+                    printf(" %s ", head->code.u.cond_goto.relop);
+                else
+                    fprintf(file_out, " %s ", head->code.u.cond_goto.relop);
                 print_operand(head->code.u.cond_goto.op2);
-                printf(" GOTO ");
+                if(print_stdout)
+                    printf(" GOTO ");
+                else
+                    fprintf(file_out, " GOTO ");
                 print_operand(head->code.u.cond_goto.target);
                 break;
-            case IC_DEC:
-                printf("DEC %s %u", head->code.u.declr.first_byte, head->code.u.declr.size);
+            }
+            case IC_DEC: {
+                if(print_stdout)
+                    printf("DEC %s %u", head->code.u.declr.first_byte, head->code.u.declr.size);
+                else
+                    fprintf(file_out, "DEC %s %u", head->code.u.declr.first_byte, head->code.u.declr.size);
                 break;
-            default:
-                printf("Padding!");
+            }
+            default: {
+                if(print_stdout)
+                    printf("Padding!");
+                else
+                    fprintf(file_out, "Padding!");
                 break;
+            }
         }
-        putchar('\n');
+        if(print_stdout)
+            putchar('\n');
+        else
+            fputc('\n', file_out);
     }
 }

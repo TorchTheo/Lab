@@ -11,17 +11,24 @@ void print_AST(Node *, int);
 void analyse(Node*);
 void init();
 
-void print_ic(ICList);
-ICList translate_deflist(Node*, Node*);
+FILE* file_out = NULL;
+
+void start_ir(Node*);
+
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
-    FILE *f = fopen(argv[1], "r");
-    if (!f) {
+    FILE *file_in = fopen(argv[1], "r");
+    if (!file_in) {
         perror(argv[1]);
         return 1;
     }
-    yyrestart(f);
+    yyrestart(file_in);
     yyparse();
+
+    if(argc > 2)
+        file_out = fopen(argv[2], "w+");
+    
+
     if(!error) {
         // print_AST(root, 0);
         // printf("++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++\n");
@@ -29,7 +36,11 @@ int main(int argc, char **argv) {
         analyse(root);
     }
     if(!error) {
-        print_ic(translate_deflist(root, NULL));
+        // print_ic(translate_deflist(root, NULL));
+        start_ir(root);
     }
+    if(file_out != NULL)
+        fclose(file_out);
+    fclose(file_in);
     return 0;
 }

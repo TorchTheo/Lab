@@ -39,12 +39,15 @@ typedef struct Func_* Func;
 typedef struct SymbolList_* SymbolList;
 
 struct Type_ {
-    enum {BASIC, ARRAY, STRUCTURE, FUNCTION} kind;
+    enum {
+        BASIC, ARRAY, STRUCTURE, FUNCTION, POINTER
+    } kind;
     union {
         enum {TYPE_INT, TYPE_FLOAT} basic; // 基本类型
         struct {Type elem; int size;} array; // 数组
         FieldList structure; // 结构体
         Func function;
+        Type pointer;
     } u;
     uint32_t size;
 };
