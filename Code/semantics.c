@@ -35,13 +35,13 @@ void pushStack();
 void popStack();
 SymbolList getStackTop();
 uint8_t typeComp(Type, Type);
+void registerStruct(Node*);
 Type getSpecifierType(Node*);
 Type getVarDecType(Node*, Node*, char**);
 Type getExpType(Node*);
 FieldList getFieldType(Node*, uint32_t);
 void deleteType(Type);
 Type copyType(Type);
-void registerStruct(Node*);
 
 
 void init() {
@@ -82,11 +82,8 @@ void analyse(Node *node) {
         else if(!strcmp(node->name, "DefList")) {
             for(Node *def = node->sons; def != NULL; def = def->next)
                 processDef(def->sons);
-
-            for(Node *stmt = node->next->sons; stmt != NULL; stmt = stmt->next) {
-                Node* stmt_inside = stmt->sons;
-                processStmt(stmt_inside);
-            }
+            for(Node *stmt = node->next->sons; stmt != NULL; stmt = stmt->next)
+                processStmt(stmt->sons);
         }
     }
 
@@ -170,7 +167,7 @@ void type2str(Type type, char *str) {
         }
         default:
             break;
-        }
+    }
 }
 
 void processDef(Node *node) {
@@ -200,9 +197,10 @@ void processDef(Node *node) {
                 for(; param_dec != NULL; param_dec = param_dec->next, param_field = param_field->next)
                     insertSymbol(param_field->name, copyType(param_field->type), VARDEC, param_dec->line);
             }
-            Node *def_list = dec->next->sons;
+
             ret_type = type->u.function->ret;
             st_top--;
+            Node *def_list = (Node *)(((Node *)(dec->next))->sons);
             analyse(def_list);
             ret_type = NULL;
         }
@@ -216,7 +214,7 @@ void processDef(Node *node) {
             }
             else {
                 Type exp_type = getExpType(dec);
-                if(0 != typeComp(exp_type, getStackTop()->type))
+                if(typeComp(exp_type, getStackTop()->type))
                     s_error(5, dec->line);
                 deleteType(exp_type);
             }
@@ -224,10 +222,10 @@ void processDef(Node *node) {
     }
 }
 
+// [x]: process Stmt
 void processStmt(Node *node) {
     if(!strcmp(node->name, "CompSt"))
         analyse(node->sons);
-    
     else if(!strcmp(node->name, "IF")) {
         Node *cond = node->sons, *if_stmt = cond->next;
         Type cond_type = getExpType(cond->sons);
@@ -238,7 +236,6 @@ void processStmt(Node *node) {
         processStmt(if_stmt->sons);
         if(node->next != NULL)
             processStmt(node->next->sons->sons);
-        
     }
     else if(!strcmp(node->name, "WHILE")) {
         Node *cond = node->sons, *while_stmt = cond->next;
@@ -251,9 +248,8 @@ void processStmt(Node *node) {
     }
     else if(!strcmp(node->name, "RETURN")) {
         Type exp_type = getExpType(node->sons);
-        if(0 != typeComp(exp_type, ret_type))
+        if(typeComp(exp_type, ret_type))
             s_error(8, node->line);
-        
         deleteType(exp_type);
     }
     else {
@@ -286,7 +282,6 @@ void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
                 if(!strcmp(name, head->name)) {
                     if(head->type->kind == BASIC && head->dep < st_top)
                         break;
-                    
                     s_error(3, line, head->name);
                     return;
                 }
@@ -295,9 +290,8 @@ void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
         case FUNCDEC:
             for(SymbolList head = hash_table[key]; head != NULL; head = head->tb_next) {
                 if(!strcmp(name, head->name)) {
-                    if(head->type->kind == FUNCTION && !typeComp(type, head->type))
+                    if(head->type->kind == FUNCTION && 0 == typeComp(type, head->type))
                         return;
-                    
                     s_error(19, line, head->name);
                     return;
                 }
@@ -306,10 +300,9 @@ void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
         case FUNCDEF:
             for(SymbolList head = hash_table[key]; head != NULL; head = head->tb_next) {
                 if(!strcmp(name, head->name)) {
-                    if(head->func_type == DEC && head->type->kind == FUNCTION) {
-                        if(!typeComp(type, head->type))
+                    if(head->func_type == DEC & head->type->kind == FUNCTION) {
+                        if(0 == typeComp(type, head->type))
                             break;
-                        
                         s_error(19, line, head->name);
                         return;
                     }
@@ -323,7 +316,6 @@ void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
                 if(!strcmp(name, head->name)) {
                     if(head->type->kind == BASIC && head->dep < st_top)
                         break;
-                    
                     s_error(3, line, head->name);
                     name = malloc(30 * sizeof(char));
                     sprintf(name, "AnonymousField@%d", anonymous_field_cnt++);
@@ -382,7 +374,7 @@ void insertSymbol(char *name, Type type, uint32_t kind, uint32_t line) {
     frame_stack[st_top] = p_id;
 }
 
-Type lookUpSymbol(char* name) {
+Type lookUpSymbol(char *name) {
     for(SymbolList head = hash_table[hash_pjw(name)]; head != NULL; head = head->tb_next)
         if(!strcmp(name, head->name))
             return head->type;
@@ -418,9 +410,6 @@ uint8_t typeComp(Type a, Type b) {
         case BASIC:
             return a->u.basic != b->u.basic;
         case ARRAY:
-            // if(a->u.array.size != b->u.array.size) {
-            //     return 1;
-            // }
             return typeComp(a->u.array.elem, b->u.array.elem);
         case STRUCTURE: {
             FieldList lst[2] = {
@@ -430,26 +419,22 @@ uint8_t typeComp(Type a, Type b) {
             while(lst[0] != NULL || lst[1] != NULL) {
                 if(lst[0] == NULL || lst[1] == NULL)
                     return 1;
-                
-                if(0 != typeComp(lst[0]->type, lst[1]->type))
+                if(typeComp(lst[0]->type, lst[1]->type))
                     return 1;
-                
                 lst[0] = lst[0]->next;
                 lst[1] = lst[1]->next;
             }
             break;
         }
         case FUNCTION: {
-            if(0 != typeComp(a->u.function->ret, b->u.function->ret))
+            if(typeComp(a->u.function->ret, b->u.function->ret))
                 return 1;
-            
             struct Type_ params[2];
             params[0].kind = params[1].kind = STRUCTURE;
             params[0].u.structure = a->u.function->parameters;
             params[1].u.structure = b->u.function->parameters;
-            if(0 != typeComp(&params[0], &params[1]))
+            if(typeComp(&params[0], &params[1]))
                 return 1;
-            
             break;
         }
 
@@ -457,6 +442,13 @@ uint8_t typeComp(Type a, Type b) {
             break;
     }
     return 0;
+}
+
+void registerStruct(Node *specifier) {
+    uint8_t last_state = struct_state;
+    struct_state = 1;
+    getSpecifierType(specifier);
+    struct_state = last_state;
 }
 
 Type getSpecifierType(Node *specifier) {
@@ -478,17 +470,14 @@ Type getSpecifierType(Node *specifier) {
         type->size = 0;
 
         Node *details = specifier->sons, *id = NULL, *def_list = NULL;
-        if(details->type == T_ID) {
+        if(details->type == T_ID)
             id = details;
-        }
-        else {
-            def_list = details, id = def_list->next;
-        }
+        else
+            def_list = details, id = (Node *)(def_list->next);
 
         char *name;
-        if(id != NULL) {
+        if(id != NULL)
             name = id->val.type_str;
-        }
         else {
             // generate a name
             name = malloc(30 * sizeof(char));
@@ -501,50 +490,51 @@ Type getSpecifierType(Node *specifier) {
             type->u.structure = getFieldType(def_list, FIELD_TYPE_STRUCT);
             struct_state = last_state;
         }
-        for(FieldList field = type->u.structure; field != NULL; field = field->next) {
-            type->size += field->type->size;
-        }
+
+        for(FieldList lst = type->u.structure; lst != NULL; lst = lst->next)
+            type->size += lst->type->size;
+
         switch (struct_state)
         {
-        case 0: {
-            uint32_t key = hash_pjw(name);
-            SymbolList p_id = NULL;
-            for(SymbolList head = hash_table[key]; head != NULL; head = head->tb_next) {
-                if(!strcmp(name, head->name)) {
-                    p_id = head;
+            case 0: {
+                uint32_t key = hash_pjw(name);
+                SymbolList p_id = NULL;
+                for(SymbolList head = hash_table[key]; head != NULL; head = head->tb_next) {
+                    if(!strcmp(name, head->name)) {
+                        p_id = head;
+                    }
                 }
-            }
-            if(p_id == NULL) {
-                if(def_list == NULL) { // struct A var;
-                    s_error(17, specifier->line, name);
+                if(p_id == NULL) {
+                    if(def_list == NULL) { // struct A var;
+                        s_error(17, specifier->line, name);
+                    }
+                    else { // struct A { int a; } var;
+                        insertSymbol(name, copyType(type), STRUCTDEF, specifier->line);
+                    }
                 }
-                else { // struct A { int a; } var;
-                    insertSymbol(name, copyType(type), STRUCTDEF, specifier->line);
-                }
-            }
-            else {
-                if(def_list == NULL) { // struct A var;
-                    if(p_id->type->kind != STRUCTURE) {
+                else {
+                    if(def_list == NULL) { // struct A var;
+                        if(p_id->type->kind != STRUCTURE) {
+                            s_error(16, specifier->line, name);
+                        }
+                        else {
+                            free(type);
+                            type = copyType(p_id->type);
+                        }
+                    }
+                    else { // struct A { int a; } var;
                         s_error(16, specifier->line, name);
                     }
-                    else {
-                        free(type);
-                        type = copyType(p_id->type);
-                    }
                 }
-                else { // struct A { int a; } var;
-                    s_error(16, specifier->line, name);
-                }
+                break;
             }
-            break;
-        }
-        case 1:
-            insertSymbol(name, type, STRUCTDEF, specifier->line);
-            break;
+            case 1:
+                insertSymbol(name, type, STRUCTDEF, specifier->line);
+                break;
 
-        default:
-            assert(0);
-            break;
+            default:
+                assert(0);
+                break;
         }
     }
     return type;
@@ -558,6 +548,7 @@ Type getVarDecType(Node *specifier, Node *vardec, char **p_name) {
         array_type->u.array.elem = type;
         array_type->u.array.size = vardec->next->val.type_int;
         array_type->size = array_type->u.array.size * type->size;
+
         vardec = vardec->sons;
         type = array_type;
     }
@@ -615,7 +606,6 @@ Type getExpType(Node *exp) {
             s_error(11, func_id_node->line, p_id->name);
             goto RETURN_DEFAULT_EXP_TYPE;
         }
-        // [x]: check param type
         param_type = p_id->type->u.function->parameters;
         while(param_type != NULL) {
             if(param_node == NULL) {
@@ -626,7 +616,7 @@ Type getExpType(Node *exp) {
                 goto RETURN_DEFAULT_EXP_TYPE;
             }
             Type exp_type = getExpType(param_node);
-            if(0 != typeComp(param_type->type, exp_type)) {
+            if(typeComp(param_type->type, exp_type)) {
                 char *str = malloc(128 * sizeof(char));
                 type2str(p_id->type, str);
                 s_error(9, func_id_node->line, str);
@@ -635,7 +625,7 @@ Type getExpType(Node *exp) {
                 goto RETURN_DEFAULT_EXP_TYPE;
             }
             deleteType(exp_type);
-            param_node = param_node->next;
+            param_node = (Node *)(param_node->next);
             param_type = param_type->next;
         }
         if(param_node != NULL) {
@@ -657,7 +647,7 @@ Type getExpType(Node *exp) {
             deleteType(arr_type), deleteType(ind_type);
             goto RETURN_DEFAULT_EXP_TYPE;
         }
-        if(ind_type->kind != BASIC || ind_type->u.basic != TYPE_INT)
+        if(ind_type->kind != BASIC || ind_type->u.basic != 0)
             s_error(12, ind_node->line);
         ret_type = copyType(arr_type->u.array.elem);
         deleteType(arr_type), deleteType(ind_type);
@@ -672,15 +662,12 @@ Type getExpType(Node *exp) {
         Type op_type[2];
         op_type[0] = getExpType(exp->sons);
         op_type[1] = getExpType(exp->sons->next);
-        if(op_type[1] == NULL) {
+        if(op_type[1] == NULL)
             return op_type[0];
-        }
-        if(0 != typeComp(op_type[0], op_type[1])) {
+        if(typeComp(op_type[0], op_type[1]))
             s_error(7, exp->line);
-        }
-        else if(op_type[0]->kind != BASIC) {
+        else if(op_type[0]->kind != BASIC)
             s_error(7, exp->line);
-        }
         deleteType(op_type[1]);
         if(!strcmp(exp->name, "RELOP")) {
             deleteType(op_type[0]);
@@ -696,9 +683,8 @@ Type getExpType(Node *exp) {
         op_type[0] = getExpType(exp->sons);
         op_type[1] = getExpType(exp->sons->next);
         if(op_type[1] != NULL) {
-            if(op_type[1]->kind != BASIC || op_type[1]->u.basic != 0) {
+            if(op_type[1]->kind != BASIC || op_type[1]->u.basic != 0)
                 s_error(7, exp->line);
-            }
             deleteType(op_type[1]);
         }
         if(op_type[0]->kind != BASIC || op_type[0]->u.basic != 0) {
@@ -713,16 +699,14 @@ Type getExpType(Node *exp) {
         Type op_type[2];
         op_type[0] = getExpType(exp->sons);
         op_type[1] = getExpType(exp->sons->next);
-        if(0 != typeComp(op_type[0], op_type[1])) {
+        if(typeComp(op_type[0], op_type[1]))
             s_error(5, exp->line);
-        }
         deleteType(op_type[1]);
-        
-        // [x]: check left value
-        Node *left_node = exp->sons;
+
+        Node *left_node = (Node *)(exp->sons);
         if(left_node->type != T_ID &&
-           0 != strcmp(left_node->name, "ArrayEval") &&
-           0 != strcmp(left_node->name, "DOT")) {
+           strcmp(left_node->name, "ArrayEval") &&
+           strcmp(left_node->name, "DOT")) {
             s_error(6, left_node->line);
         }
 
@@ -731,9 +715,8 @@ Type getExpType(Node *exp) {
 
     if(!strcmp(exp->name, "DOT")) {
         Type struct_type = getExpType(exp->sons);
-        if(struct_type->kind != STRUCTURE) {
+        if(struct_type->kind != STRUCTURE)
             s_error(13, exp->line);
-        }
         else {
             Node *field_node = exp->sons->next;
             if(field_node->type != T_ID) {
@@ -742,11 +725,9 @@ Type getExpType(Node *exp) {
             }
             else {
                 FieldList field_list = struct_type->u.structure;
-                for(; field_list != NULL; field_list = field_list->next) {
-                    if(!strcmp(field_node->val.type_str, field_list->name)) {
+                for(; field_list != NULL; field_list = field_list->next)
+                    if(!strcmp(field_node->val.type_str, field_list->name))
                         return copyType(field_list->type);
-                    }
-                }
                 s_error(14, field_node->line, field_node->val.type_str);
             }
         }
@@ -807,10 +788,11 @@ FieldList getFieldType(Node *node, uint32_t field_type) {
         free(head);
     }
     frame_stack[st_top--] = NULL;
-    uint32_t off = 0;
-    for(FieldList field = field_list; field != NULL; field = field->next) {
-        field->offset = off;
-        off += field->type->size;
+
+    uint32_t offset = 0;
+    for(FieldList lst = field_list; lst != NULL; lst = lst->next) {
+        lst->offset = offset;
+        offset += lst->type->size;
     }
 
     return field_list;
@@ -854,9 +836,9 @@ void deleteType(Type type) {
 }
 
 Type copyType(Type type) {
-    if(type == NULL)
+    if(type == NULL) {
         return NULL;
-    
+    }
     Type copied_type = malloc(SIZEOF(Type_));
     copied_type->kind = type->kind;
     copied_type->size = type->size;
@@ -872,10 +854,11 @@ Type copyType(Type type) {
         case STRUCTURE: {
             FieldList *p_list = &(copied_type->u.structure), src = type->u.structure;
             while(src != NULL) {
-                (*p_list) = malloc(SIZEOF(FieldList_));
+                (*p_list) = calloc(1, sizeof(struct FieldList_));
                 (*p_list)->type = copyType(src->type);
                 (*p_list)->name = src->name;
                 (*p_list)->offset = src->offset;
+
                 p_list = &((*p_list)->next), src = src->next;
             }
             break;
@@ -884,7 +867,7 @@ Type copyType(Type type) {
             FieldList *p_list = &(copied_type->u.function->parameters), src = type->u.function->parameters;
             copied_type->u.function->ret = copyType(type->u.function->ret);
             while(src != NULL) {
-                (*p_list) = malloc(SIZEOF(FieldList_));
+                (*p_list) = calloc(1, sizeof(struct FieldList_));
                 (*p_list)->type = copyType(src->type);
 
                 p_list = &((*p_list)->next), src = src->next;
@@ -897,11 +880,4 @@ Type copyType(Type type) {
     }
 
     return copied_type;
-}
-
-void registerStruct(Node* specifier) {
-    uint8_t last_state = struct_state;
-    struct_state = 1;
-    getSpecifierType(specifier);
-    struct_state = last_state;
 }

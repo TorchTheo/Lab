@@ -3,18 +3,31 @@
 
 #define HASH_TABLE_SIZE     0x4000
 #define FRAME_STACK_SIZE    0x1000
+
 #define VARDEC              0
 #define FUNCDEC             1
 #define STRUCTDEF           2
 #define FUNCDEF             3
-#define TRUE                1
-#define FALSE               0
 #define PARAMDEC            4
 #define FIELDDEC            5
+
+#define TRUE                1
+#define FALSE               0
+
 #define FIELD_TYPE_PARAM    0
 #define FIELD_TYPE_STRUCT   1
+
 #define LEFT_VALUE          0
 #define RIGHT_VALUE         1
+
+#define FILE_OUT            1
+#define STD_OUT             0
+
+#define STREAM_STRING       0
+#define STREAM_CHAR         1
+#define STREAM_INT          2
+#define STREAM_UINT32       3
+#define NO_PARAM            4
 
 #ifdef __SEMATICS_C__
 

@@ -16,16 +16,17 @@ static uint32_t hash(char *name) {
     return val;
 }
 
-void update(char *key, uint32_t val) {
+uint32_t* insert(char *key) {
     uint32_t index = hash(key);
     for(List head = hash_table[index]; head != NULL; head = head->next)
         if(!strcmp(key, head->key))
-            head->value = val;
+            return &(head->value);
     List list_node = malloc(SIZEOF(ListNode));
     list_node->key = key, list_node->value = 0, list_node->next = hash_table[index];
     if(hash_table[index] != NULL)
         hash_table[index]->prev = list_node;
     hash_table[index] = list_node;
+    return &(list_node->value);
 }
 
 uint32_t *get_value_pointer(char *key) {

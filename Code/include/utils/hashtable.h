@@ -13,7 +13,7 @@ struct ListNode {
 };
 
 static uint32_t hash(char *key);
-void update(char *key, uint32_t val);
+uint32_t* insert(char *key);
 uint32_t *get_value_pointer(char *key);
 uint32_t get_value(char *key);
 uint8_t delete_key_pointer(List list_node);
