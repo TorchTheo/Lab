@@ -3,6 +3,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+static struct ListNode {
+    char *key;
+    uint64_t value;
+    List prev, next;
+};
+
 static List hash_table[HASH_SIZE];
 
 static uint32_t hash(char *name) {
@@ -16,7 +22,7 @@ static uint32_t hash(char *name) {
     return val;
 }
 
-uint32_t* insert(char *key) {
+uint64_t* insert(char *key) {
     uint32_t index = hash(key);
     for(List head = hash_table[index]; head != NULL; head = head->next)
         if(!strcmp(key, head->key))
@@ -29,7 +35,7 @@ uint32_t* insert(char *key) {
     return &(list_node->value);
 }
 
-uint32_t *get_value_pointer(char *key) {
+uint64_t *get_value_pointer(char *key) {
     uint32_t index = hash(key);
     for(List head = hash_table[index]; head != NULL; head = head->next)
         if(!strcmp(head->key, key))
@@ -37,7 +43,7 @@ uint32_t *get_value_pointer(char *key) {
     return NULL;
 }
 
-uint32_t get_value(char *key) {
+uint64_t get_value(char *key) {
     uint32_t index = hash(key);
     for(List head = hash_table[index]; head != NULL; head = head->next)
         if(!strcmp(head->key, key))
@@ -73,5 +79,18 @@ uint8_t delete_key(char *key) {
             free(head);
             return TRUE;
         }
+    }
+}
+
+void clear_table() {
+    for (int i = 0; i < HASH_TABLE_SIZE; i++) {
+        for (List tail = hash_table[i]; tail != NULL;) {
+            List node_to_delete = tail;
+            tail = tail->next;
+
+            free(node_to_delete);
+        }
+
+        hash_table[i] = NULL;
     }
 }

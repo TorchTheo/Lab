@@ -86,6 +86,27 @@ static const char *instrs[] = {
     "beq", "bne", "bgt", "blt", "bge", "ble",
 };
 
+static const char *reg_name[] = {
+    "$zero",
+    "",
+    "$v0", "$v1",
+    "$a0", "$a1", "$a2", "$a3",
+    "$t0", "$t1", "$t2", "$t3", "$t4", "$t5", "$t6", "$t7",
+    "$s0", "$s1", "$s2", "$s3", "$s4", "$s5", "$s6", "$s7",
+    "$t8", "$t9",
+    "", "", "",
+    "$sp",
+    "$fp",
+    "$ra",
+};
+
 #endif
+
+#define NR_REGS 32
+//                            RFS   TT        TTTTTTTTAAAAVV
+#define USE_FREE            0b00000011000000001111111111111100u
+//                                    SSSSSSSS
+#define SAVE_BEFORE_USE     0b00000000111111110000000000000000u
+
 
 #endif

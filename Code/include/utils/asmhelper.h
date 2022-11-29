@@ -43,4 +43,22 @@
         );                                                                              \
     }
 
+#define PUSH_STACK                                                                      \
+    newAsmCode(                                                                         \
+        ASM_ADDI,                                                                       \
+        newAsmOp(REG, REG_SP),                                                          \
+        newAsmOp(REG, REG_SP),                                                          \
+        newAsmOP(IMM, -4)                                                               \
+    )
+
+#define PUSH_REG_CODE(reg)                                                              \
+    append(                                                                             \
+        PUSH_STACK,                                                                     \
+        newAsmCode(                                                                     \
+            ASM_SW,                                                                     \
+            newAsmOP(REG, reg),                                                         \
+            newAsmOP(ADDR, 0, REG_SP)                                                   \
+        )                                                                               \
+    )
+
 #endif

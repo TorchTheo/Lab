@@ -4,6 +4,10 @@
 typedef unsigned int uint32_t;
 typedef unsigned char uint8_t;
 typedef unsigned char boolean;
+typedef unsigned long long uint64_t;
+typedef char int8_t;
+typedef int int32_t;
+typedef long long int64_t;
 #define SIZEOF(x) sizeof(struct x)
 typedef enum {
     T_INT,
@@ -137,10 +141,15 @@ struct AsmOp_ {
         IMM,
         REG,
         NAME,
+        ADDR,
     } op_kind;
     union {
         int val; // IMM and REG
         char *name; // NAME
+        struct {
+            int offset;
+            uint8_t base_reg;
+        } addr;
     } u;
 };
 
