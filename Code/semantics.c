@@ -1,3 +1,4 @@
+#ifndef __SEMATICS_C__
 #define __SEMATICS_C__
 #include <stdio.h>
 #include <stdlib.h>
@@ -881,3 +882,5 @@ Type copyType(Type type) {
 
     return copied_type;
 }
+
+#endif

@@ -13,7 +13,11 @@ void init();
 
 FILE* file_out = NULL;
 
-void start_ir(Node*);
+ICList start_ir(Node*);
+void print_ic(ICList);
+
+void printAsmList(AsmList);
+AsmList start_assemble(ICList);
 
 int main(int argc, char **argv) {
     if (argc <= 1) return 1;
@@ -36,8 +40,10 @@ int main(int argc, char **argv) {
         analyse(root);
     }
     if(!error) {
-        // print_ic(translate_deflist(root, NULL));
-        start_ir(root);
+        ICList ic = start_ir(root);
+        // print_ic(ic);
+        AsmList alist = start_assemble(ic);
+        printAsmList(alist);
     }
     if(file_out != NULL)
         fclose(file_out);

@@ -1,3 +1,4 @@
+#ifndef __IC_C__
 #define __IR_C__
 #include <stdio.h>
 #include <string.h>
@@ -28,33 +29,36 @@ static uint32_t temp_var_cnt = 0;
 static uint8_t value_type = RIGHT_VALUE;
 static uint8_t print_stream = STD_OUT;
 
-void start_ir(Node*);
-Operand new_operand(uint32_t, ...);
-Operand new_temp();
-ICList new_ic(int, ...);
-char *new_label_name();
-char *get_temp_var_name();
-ICList append(ICList, ICList);
-ICList translate_exp(Node*, char*);
-ICList translate_cond(Node*, char*, char*);
-ICList translate_stmt(Node*);
-ICList translate_def(Node*);
-ICList translate_deflist(Node*, Node*);
-ICList translate_copy_arr(char*, char*, uint32_t);
-Operand copy_operand(Operand);
-ICList optimizeICList(ICList);
-void print_operand(Operand);
+ICList start_ir(Node*);
+static Operand new_operand(uint32_t, ...);
+static Operand new_temp();
+static ICList new_ic(int, ...);
+static char *new_label_name();
+static char *get_temp_var_name();
+static ICList append(ICList, ICList);
+static ICList translate_exp(Node*, char*);
+static ICList translate_cond(Node*, char*, char*);
+static ICList translate_stmt(Node*);
+static ICList translate_def(Node*);
+static ICList translate_deflist(Node*, Node*);
+static ICList translate_copy_arr(char*, char*, uint32_t);
+static Operand copy_operand(Operand);
+static ICList optimizeICList(ICList);
+static void print_operand(Operand);
 void print_ic(ICList);
 
-void start_ir(Node *root) {
+ICList start_ir(Node *root) {
     if(file_out != NULL) {
         print_stream = FILE_OUT;
     }
     // print_ic(translate_deflist(root, NULL));
-    print_ic(optimizeICList(translate_deflist(root, NULL)));
+    // ICList ic = optimizeICList(translate_deflist(root, NULL));
+    ICList ic = translate_deflist(root, NULL);
+    // print_ic(ic);
+    return ic;
 }
 
-Operand new_operand(uint32_t op_type, ...) {
+static Operand new_operand(uint32_t op_type, ...) {
     Operand ret = malloc(SIZEOF(Operand_));
     va_list list;
     va_start(list, op_type);
@@ -74,11 +78,11 @@ Operand new_operand(uint32_t op_type, ...) {
     return ret;
 }
 
-Operand new_temp() {
+static Operand new_temp() {
     return new_operand(OP_VAR, get_temp_var_name());
 }
 
-ICList new_ic(int code_type, ...) {
+static ICList new_ic(int code_type, ...) {
     ICList ic = calloc(1, sizeof(struct ICList_));
     va_list list;
     va_start(list, code_type);
@@ -121,19 +125,19 @@ ICList new_ic(int code_type, ...) {
     return ic;
 }
 
-char *new_label_name() {
+static char *new_label_name() {
     char *name = malloc(30 * sizeof(char));
     sprintf(name, "LABEL%u", label_cnt++);
     return name;
 }
 
-char *get_temp_var_name() {
+static char *get_temp_var_name() {
     char *name = malloc(30 * sizeof(char));
     sprintf(name, "TEMPVAR%u", temp_var_cnt++);
     return name;
 }
 
-ICList append(ICList head, ICList tail) {
+static ICList append(ICList head, ICList tail) {
     // assert(head != NULL && tail != NULL);
     if(head == NULL)
         return tail;
@@ -146,7 +150,7 @@ ICList append(ICList head, ICList tail) {
     return head;
 }
 
-ICList translate_exp(Node* exp, char* place) {
+static ICList translate_exp(Node* exp, char* place) {
     if(exp == NULL)
         return NULL;
     if(exp->type == T_INT)
@@ -387,7 +391,7 @@ ICList translate_exp(Node* exp, char* place) {
     }
 }
 
-ICList translate_cond(Node* exp, char* label_true, char* label_false) {
+static ICList translate_cond(Node* exp, char* label_true, char* label_false) {
     if(!strcmp(exp->name, "RELOP")) {
         Node *left_exp = exp->sons, *right_exp = left_exp->next;
         Operand t1 = new_temp(), t2 = new_temp();
@@ -427,7 +431,7 @@ ICList translate_cond(Node* exp, char* label_true, char* label_false) {
     return append(code1, append(code2, new_ic(IC_GOTO, label_false)));
 }
 
-ICList translate_stmt(Node* stmt) {
+static ICList translate_stmt(Node* stmt) {
     if(!strcmp(stmt->name, "CompSt"))
         return translate_deflist(stmt->sons, NULL);
     else if(!strcmp(stmt->name, "RETURN")) {
@@ -484,7 +488,7 @@ ICList translate_stmt(Node* stmt) {
         return translate_exp(stmt, NULL);
 }
 
-ICList translate_def(Node* node) {
+static ICList translate_def(Node* node) {
     ICList ic = NULL;
     Node *specifier = node, *dec = node->next;
     if(dec == NULL) {
@@ -527,7 +531,7 @@ ICList translate_def(Node* node) {
     return ic;
 }
 
-ICList translate_deflist(Node* def_list, Node* param_list) {
+static ICList translate_deflist(Node* def_list, Node* param_list) {
     ICList ic = NULL;
     pushStack();
     if(param_list != NULL) {
@@ -566,7 +570,7 @@ ICList translate_deflist(Node* def_list, Node* param_list) {
     return ic;
 }
 
-ICList translate_copy_arr(char* left_name, char* right_name, uint32_t size) {
+static ICList translate_copy_arr(char* left_name, char* right_name, uint32_t size) {
     if(left_name == NULL)
         return NULL;
     ICList copyAll = NULL;
@@ -586,14 +590,14 @@ ICList translate_copy_arr(char* left_name, char* right_name, uint32_t size) {
     return copyAll;
 }
 
-Operand copy_operand(Operand op) {
+static Operand copy_operand(Operand op) {
     Operand ret = malloc(SIZEOF(Operand_));
     ret->kind = op->kind;
     ret->u = op->u;
     return ret;
 }
 
-ICList optimizeICList(ICList icode) {
+static ICList optimizeICList(ICList icode) {
     int times = 5;
     while(times--) {
         for(ICList line = icode; line != NULL; line = line->next) {
@@ -824,7 +828,7 @@ ICList optimizeICList(ICList icode) {
     return icode;
 }
 
-void print_operand(Operand op) {
+static void print_operand(Operand op) {
     switch(op->kind) {
         case OP_VAR: {
             if(!print_stream)
@@ -954,3 +958,4 @@ void print_ic(ICList ic) {
             fputc('\n', file_out);
     }
 }
+#endif

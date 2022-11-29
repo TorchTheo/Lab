@@ -127,4 +127,56 @@ struct ICList_ {
     ICList prev, next, tail;
 };
 
+// MIPS32
+
+typedef struct AsmOp_* AsmOp;
+typedef struct AsmList_* AsmList;
+
+struct AsmOp_ {
+    enum {
+        IMM,
+        REG,
+        NAME,
+    } op_kind;
+    union {
+        int val; // IMM and REG
+        char *name; // NAME
+    } u;
+};
+
+struct AsmCode_ {
+    enum {
+        ASM_LABEL,
+        ASM_LI,
+        ASM_LW,
+        ASM_SW,
+        ASM_MOVE,
+        ASM_ADD,
+        ASM_ADDI,
+        ASM_SUB,
+        ASM_MUL,
+        ASM_DIV,
+        ASM_MFLO,
+        ASM_J,
+        ASM_JAL,
+        ASM_JR,
+        ASM_BEQ,
+        ASM_BNE,
+        ASM_BGT,
+        ASM_BLT,
+        ASM_BGE,
+        ASM_BLE,
+    } asm_kind;
+    union {
+        struct { AsmOp op; } uniop;
+        struct { AsmOp op1, op2; } binop;
+        struct { AsmOp op1, op2, op3; } triop;
+    } u;
+};
+
+struct AsmList_ {
+    struct AsmCode_ asm_code;
+    AsmList prev, next, tail;
+};
+
 #endif

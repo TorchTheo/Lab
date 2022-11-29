@@ -57,6 +57,7 @@ char *formats[] = {
 #endif
 
 #ifdef __IR_C__
+
 static const char *icode_name[] = {
     "", "", "", "", 
     "LABEL",
@@ -71,6 +72,20 @@ static const char *icode_name[] = {
     "READ",
     "WRITE",
 };
+
+#endif
+
+#ifdef __ASSEMBLE_C__
+
+static const char *relop_str[] = { "==", "!=", ">", "<", ">=", "<=" };
+static const char *instrs[] = {
+    "",
+    "li", "lw", "sw", "move",
+    "add", "addi", "sub", "mul", "div", "mflo",
+    "j", "jal", "jr",
+    "beq", "bne", "bgt", "blt", "bge", "ble",
+};
+
 #endif
 
 #endif
