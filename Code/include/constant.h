@@ -84,6 +84,7 @@ static const char *instrs[] = {
     "add", "addi", "sub", "mul", "div", "mflo",
     "j", "jal", "jr",
     "beq", "bne", "bgt", "blt", "bge", "ble",
+    "syscall",
 };
 
 static const char *reg_name[] = {

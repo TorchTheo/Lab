@@ -29,6 +29,7 @@ static void loadRegImm(uint8_t, int, AsmList);
 static void addVar(char*, uint8_t);
 static void clearVar(char*);
 static void prepareVarInStack(char*, AsmList);
+static void getVarInStack(char*, int);
 static AsmList generateAsmList(ICList);
 static void printAsmOp(AsmOp);
 void printAsmList(AsmList);
@@ -80,7 +81,8 @@ static AsmList newAsmCode(int type, ...) {
             alist->asm_code.u.triop.op2 = va_arg(list, AsmOp);
             alist->asm_code.u.triop.op3 = va_arg(list, AsmOp);
             break;
-
+        case ASM_SYS:
+            break;
         default:
             assert(0);
             break;
@@ -112,7 +114,11 @@ static int getVarReg(char *name) {
         if (CHECK_USE_FREE(i) && regs[i].content.lst->next == NULL)
             return i;
     
-    assert(0);
+    static uint8_t next_reg = 0;
+    do {
+        next_reg = (next_reg + 1) % NR_REGS;
+    } while(!CHECK_USE_FREE(next_reg));
+    return next_reg;
 }
 
 static int getImmReg(int imm) {
@@ -122,7 +128,11 @@ static int getImmReg(int imm) {
         if (CHECK_USE_FREE(i) && regs[i].content.lst->next == NULL)
             return i;
 
-    assert(0);
+    static uint8_t next_reg = 0;
+    do {
+        next_reg = (next_reg + 1) % NR_REGS;
+    } while(!CHECK_USE_FREE(next_reg));
+    return next_reg;
 }
 
 inline static int getReg(Operand op) {
@@ -132,8 +142,17 @@ inline static int getReg(Operand op) {
 }
 
 static void storeReg(uint8_t reg_index, AsmList alist) {
-    for (LinkList name_node = regs[reg_index].content.lst->next; name_node != NULL; name_node = name_node->next) {
-        AddrDesc addr = (AddrDesc)get_value((char*)(name_node->value));
+    for (strLinkList name_node = regs[reg_index].content.lst->next; name_node != NULL; name_node = name_node->next) {
+        AddrDesc addr = (AddrDesc)get_value(name_node->value);
+        if (addr == NULL) {
+            assert(
+                name_node->value != NULL &&
+                strlen(name_node->value) == 0 &&
+                name_node->next == NULL &&
+                regs[reg_index].content.lst->next == name_node
+            );
+            continue;
+        }
         alist = append(
             alist, 
             newAsmCode(
@@ -142,21 +161,37 @@ static void storeReg(uint8_t reg_index, AsmList alist) {
                 newAsmOP(ADDR, addr->addr_list->value, REG_FP)
             )
         );
-        linklistInsert(addr->addr_list, addr->addr_list->value);
+        intLinklistInsert(addr->addr_list, addr->addr_list->value);
     }
 }
 
 static void clearReg(uint8_t reg_index, AsmList alist) {
     storeReg(reg_index, alist);
-    for (LinkList name_node = regs[reg_index].content.lst->next; name_node != NULL; name_node = name_node->next) {
-        AddrDesc addr = (AddrDesc)get_value((char*)(name_node->value));
+    for (strLinkList name_node = regs[reg_index].content.lst->next; name_node != NULL; name_node = name_node->next) {
+        AddrDesc addr = (AddrDesc)get_value(name_node->value);
+        if (addr == NULL) {
+            assert(
+                name_node->value != NULL &&
+                strlen(name_node->value) == 0 &&
+                name_node->next == NULL &&
+                regs[reg_index].content.lst->next == name_node
+            );
+            continue;
+        }
         CLEAR_REG(addr->reg_vec, reg_index);
     }
-    linklistClear(regs[reg_index].content.lst);
+    intLinklistClear(regs[reg_index].content.lst);
+    regs[reg_index].content.imm = 0;
 }
 
 static void loadReg(uint8_t reg_index, char *name, AsmList alist) {
     AddrDesc addr = (AddrDesc)get_value(name);
+    if (addr == NULL) {
+        assert(name != NULL && strlen(name) == 0);
+        clearReg(reg_index, alist);
+        strLinklistInsert(regs[reg_index].content.lst, name);
+        return;
+    }
     if (CHECK_REG(addr->reg_vec, reg_index))
         return;
     clearReg(reg_index, alist);
@@ -185,12 +220,12 @@ static void loadReg(uint8_t reg_index, char *name, AsmList alist) {
         );
     }
 
-    linklistInsert(regs[reg_index].content.lst, (int64_t)name);
+    strLinklistInsert(regs[reg_index].content.lst, name);
     SET_REG(addr->reg_vec, reg_index);
 }
 
 static void loadRegImm(uint8_t reg_index, int imm, AsmList alist) {
-    if (regs[reg_index].content.lst->next == NULL && regs[reg_index].content.imm == imm)
+    if (regs[reg_index].content.lst->next == NULL && regs[reg_index].content.imm == imm && imm)
         return;
     clearReg(reg_index, alist);
     alist = append(
@@ -208,16 +243,16 @@ static void addVar(char *name, uint8_t reg_index) {
     AddrDesc addr = (AddrDesc)get_value(name);
     if (!CHECK_REG(addr->reg_vec, reg_index)) {
         SET_REG(addr->reg_vec, reg_index);
-        linklistInsert(regs[reg_index].content.lst, (int64_t)(name));
+        strLinklistInsert(regs[reg_index].content.lst, name);
     }
 }
 
 static void clearVar(char *name) {
     AddrDesc addr = (AddrDesc)get_value(name);
-    linklistClear(addr->addr_list);
+    intLinklistClear(addr->addr_list);
     for (int i = 0; i < NR_REGS; i++)
         if (CHECK_REG(addr->reg_vec, i))
-            linklistDelete(regs[i].content.lst, (int64_t)(name));
+            strLinklistDelete(regs[i].content.lst, name);
     addr->reg_vec = 0;
 }
 
@@ -226,77 +261,71 @@ static void prepareVarInStack(char *name, AsmList alist) {
     if (var_desc == NULL) {
         alist = append(
             alist, 
-            PUSH_STACK
+            PUSH_STACK(1)
         );
         stack_off -= 4;
 
         var_desc = calloc(1, SIZEOF(AddrDesc_));
         var_desc->var_name = name;
-        var_desc->addr_list = newLinkList();
+        var_desc->addr_list = intNewLinkList();
         var_desc->addr_list->value = stack_off;
         *insert(name) = (uint64_t)var_desc;
     }
+}
+
+static void getVarInStack(char *name, int offset) {
+    AddrDesc var_desc = (AddrDesc)get_value(name);
+    assert(var_desc == NULL);
+
+    var_desc = calloc(1, SIZEOF(AddrDesc_));
+    var_desc->var_name = name;
+    var_desc->addr_list = intNewLinkList();
+    var_desc->addr_list->value = offset;
+    intLinklistInsert(var_desc->addr_list, offset);
+    *insert(name) = (uint64_t)var_desc;
 }
 
 static AsmList generateAsmList(ICList icode_list) {
     AsmList alist = NULL;
     clear_table();
     for (int i = 0; i < NR_REGS; i++)
-        regs[i].content.lst = newLinkList();
+        regs[i].content.lst = strNewLinkList();
 
     for (ICList line = icode_list; line != NULL; line = line->next) {
         switch (line->code.kind) {
             case IC_ADD: {
-                CHECK_AND_GET_BINOP(res, op1, op2);
-                prepareVarInStack(res->u.var_name, alist);
-                prepareVarInStack(op1->u.var_name, alist);
-
-                uint8_t reg_res, reg_op1;
-
-                reg_op1 = getReg(op1);
-                loadReg(reg_op1, op1->u.var_name, alist);
-
-                reg_res = getReg(res);
-                clearReg(reg_res, alist);
-
-                if (op2->kind == OP_VAR) {
-                    prepareVarInStack(op2->u.var_name, alist);
-                    uint8_t reg_op2 = getReg(op2);
-                    loadReg(reg_op2, op2->u.var_name, alist);
-
-                    alist = append(
-                        alist,
-                        newAsmCode(
-                            ASM_ADD,
-                            newAsmOP(REG, reg_res),
-                            newAsmOP(REG, reg_op1),
-                            newAsmOP(REG, reg_op2)
-                        )
-                    );
-                } else
-                    alist = append(
-                        alist,
-                        newAsmCode(
-                            ASM_ADD,
-                            newAsmOP(REG, reg_res),
-                            newAsmOP(REG, reg_op1),
-                            newAsmOP(IMM, op2->u.val)
-                        )
-                    );
-                clearVar(res->u.var_name);
-                addVar(res->u.var_name, reg_res);
+                GENERATE_ADDSUB_ASM(ASM_ADD, +);
                 break;
             }
             case IC_SUB: {
-                CHECK_AND_GET_BINOP(res, op1, op2);
+                GENERATE_ADDSUB_ASM(ASM_SUB, -);
                 break;
             }
             case IC_MUL: {
-                CHECK_AND_GET_BINOP(res, op1, op2);
+                GENERATE_MULDIV_ASM(
+                    newAsmCode(
+                        ASM_MUL,
+                        newAsmOP(REG, reg_res),
+                        newAsmOP(REG, reg_op1),
+                        newAsmOP(REG, reg_op2)
+                    )
+                );
                 break;
             }
             case IC_DIV: {
-                CHECK_AND_GET_BINOP(res, op1, op2);
+                GENERATE_MULDIV_ASM(
+                    append(
+                        newAsmCode(
+                            ASM_DIV,
+                            newAsmOP(REG, reg_op1),
+                            newAsmOP(REG, reg_op2)
+                        ),
+                        newAsmCode(
+                            ASM_MFLO,
+                            newAsmOP(REG, reg_res)
+                        )
+                    )
+                );
                 break;
             }
             case IC_ASSIGN: {
@@ -309,50 +338,87 @@ static AsmList generateAsmList(ICList icode_list) {
 
                 prepareVarInStack(left->u.var_name, alist);
 
-                uint8_t reg_left = getReg(left), reg_right;
+                uint8_t reg_right;
 
-                clearReg(reg_left, alist);
                 switch (right->kind) {
                     case OP_VAR:
                         prepareVarInStack(right->u.var_name, alist);
                         reg_right = getReg(right);
                         loadReg(reg_right, right->u.var_name, alist);
-                        alist = append(
-                            alist,
-                            newAsmCode(
-                                ASM_MOVE, 
-                                newAsmOp(REG, reg_left), 
-                                newAsmOp(REG, reg_right)
-                            )
-                        );
-                        clearVar(left->u.var_name);
-                        addVar(left->u.var_name, reg_left);
-
-                        addVar(left->u.var_name, reg_right);
-                        addVar(right->u.var_name, reg_left);
                         break;
                     case OP_CONST:
+                        reg_right = getReg(right);
+                        loadRegImm(reg_right, right->u.val, alist);
+                        break;
+                    case OP_FUNC: {
+                        int arg_index = 0;
+                        for (ICList prev_line = line->prev; prev_line != NULL; prev_line = prev_line->prev, arg_index++) {
+                            if (prev_line->code.kind != IC_ARG)
+                                break;
+                            Operand arg = prev_line->code.u.uniop.op;
+                            if (arg_index < 4) {
+                                if (arg->kind == OP_VAR) {
+                                    prepareVarInStack(arg->u.var_name, alist);
+                                    loadReg(REG_ARG_0 + arg_index, arg->u.var_name, alist);
+                                } else {
+                                    assert(arg->kind == OP_CONST);
+                                    loadRegImm(REG_ARG_0 + arg_index, arg->u.val, alist);
+                                }
+                            } else {
+                                if (arg->kind == OP_VAR) {
+                                    prepareVarInStack(arg->u.var_name, alist);
+                                    uint8_t reg_arg = getReg(arg);
+                                    loadReg(reg_arg, arg->u.var_name, alist);
+                                    alist = append(
+                                        alist,
+                                        PUSH_REG_CODE(reg_arg)
+                                    );
+                                } else {
+                                    assert(arg->kind == OP_CONST);
+                                    uint8_t reg_arg = getReg(arg);
+                                    loadRegImm(reg_arg, arg->u.val, alist);
+                                    alist = append(
+                                        alist,
+                                        PUSH_REG_CODE(reg_arg)
+                                    );
+                                }
+                            }
+                        }
+                        for (int i = 0; i < NR_REGS; i++) {
+                            clearReg(i, alist);
+                        }
+                        alist = append(
+                            alist,
+                            PUSH_REG_CODE(REG_RET)
+                        );
                         alist = append(
                             alist,
                             newAsmCode(
-                                ASM_LI,
-                                newAsmOp(REG, reg_left),
-                                newAsmOp(IMM, right->u.val)
+                                ASM_JAL,
+                                newAsmOP(NAME, right->u.var_name)
                             )
                         );
-                        clearVar(left->u.var_name);
-                        addVar(left->u.var_name, reg_left);
+                        reg_right = REG_VALUE_0;
+                        alist = append(
+                            alist,
+                            POP_REG_CODE(REG_RET)
+                        );
+                        if (arg_index >= 4)
+                            alist = append(
+                                alist,
+                                POP_STACK(arg_index - 4)
+                            );
                         break;
-                    case OP_FUNC:
-                        assert(0);
-                        break;
+                    }
                     
                     default:
                         break;
                 }
+                clearVar(left->u.var_name);
+                addVar(left->u.var_name, reg_right);
                 break;
             }
-            case IC_LABEL: case IC_FUNCTION:
+            case IC_LABEL: case IC_FUNCTION: {
                 alist = append(
                     alist,
                     newAsmCode(ASM_LABEL, newAsmOp(NAME, line->code.u.uniop.op->u.var_name))
@@ -371,8 +437,21 @@ static AsmList generateAsmList(ICList icode_list) {
                             newAsmOP(REG, REG_SP)
                         )
                     );
+                    int param_index = 0;
+                    for (ICList next_line = line->next; next_line != NULL; next_line = next_line->next, param_index++) {
+                        if (next_line->code.kind != IC_PARAM)
+                            break;
+                        Operand param = next_line->code.u.uniop.op;
+                        assert(param->kind == OP_VAR);
+                        if (param_index < 4) {
+                            prepareVarInStack(param->u.var_name, alist);
+                            addVar(param->u.var_name, REG_ARG_0 + param_index);
+                        } else
+                            getVarInStack(param->u.var_name, 8 + (param_index - 4) * 4);
+                    }
                 }
                 break;
+            }
             case IC_GOTO:
                 alist = append(
                     alist,
@@ -386,10 +465,22 @@ static AsmList generateAsmList(ICList icode_list) {
                 int relop = -1;
                 for (int i = 0; i < 6; i++)
                     if (!strcmp(relop_str[i], line->code.u.cond_goto.relop)) {
-                        relop = ASM_BEQ + i;
+                        relop = i;
                         break;
                     }
                 
+                if (op[0]->kind == OP_CONST) {
+                    if (op[1]->kind == OP_CONST) {
+                        op[0]->u.val -= op[1]->u.val;
+                        op[1]->u.val = 0;
+                    } else {
+                        Operand tmp = op[0];
+                        op[0] = op[1], op[1] = tmp;
+                        if (relop >= 2)
+                            relop += (relop % 2 ? -1 : 1);
+                    }
+                }
+
                 uint8_t op_reg[2];
                 for (int i = 0; i < 2; i++) {
                     if (op[i]->kind == OP_CONST) {
@@ -406,7 +497,7 @@ static AsmList generateAsmList(ICList icode_list) {
                 alist = append(
                     alist,
                     newAsmCode(
-                        relop,
+                        relop + ASM_BEQ,
                         newAsmOp(REG, op_reg[0]),
                         newAsmOp(REG, op_reg[1]),
                         newAsmOp(NAME, line->code.u.cond_goto.target->u.var_name)
@@ -415,18 +506,96 @@ static AsmList generateAsmList(ICList icode_list) {
                 break;
             }
             // TODO
-            case IC_RETURN:
+            case IC_RETURN: {
+                Operand rs = line->code.u.uniop.op;
+                clearReg(REG_VALUE_0, alist);
+                switch (rs->kind) {
+                    case OP_VAR:
+                        prepareVarInStack(rs->u.var_name, alist);
+                        loadReg(REG_VALUE_0, rs->u.var_name, alist);
+                        break;
+                    case OP_CONST:
+                        loadRegImm(REG_VALUE_0, rs->u.val, alist);
+                        break;
+                    case OP_FUNC:
+                        assert(0);
+                        break;
+                }
+                alist = append(
+                    alist,
+                    append(
+                        append(
+                            newAsmCode(
+                                ASM_MOVE,
+                                newAsmOP(REG, REG_SP),
+                                newAsmOp(REG, REG_FP)
+                            ),
+                            POP_REG_CODE(REG_FP)
+                        ),
+                        newAsmCode(
+                            ASM_JR,
+                            newAsmOP(REG, REG_RET)
+                        )
+                    )
+                );
                 break;
+            }
             case IC_DEC:
+                assert(0);
                 break;
             case IC_ARG:
                 break;
             case IC_PARAM:
                 break;
-            case IC_READ:
+            case IC_READ: {
+                Operand dest = NULL;
+                if (line->code.u.uniop.op->kind == OP_VAR)
+                    dest = line->code.u.uniop.op;
+                assert(dest != NULL);
+                prepareVarInStack(dest->u.var_name, alist);
+                clearReg(REG_VALUE_0, alist);
+                loadRegImm(REG_VALUE_0, 5, alist);
+
+                alist = append(
+                    alist,
+                    newAsmCode(ASM_SYS)
+                );
+
+                addVar(dest->u.var_name, REG_VALUE_0);
                 break;
-            case IC_WRITE:
+            }
+            case IC_WRITE:{
+                Operand src = NULL;
+                if (line->code.u.uniop.op->kind == OP_VAR || line->code.u.uniop.op->kind == OP_CONST)
+                    src = line->code.u.uniop.op;
+                assert(src != NULL);
+                clearReg(REG_VALUE_0, alist);
+                loadRegImm(REG_VALUE_0, 1, alist);
+                if (src->kind == OP_VAR) {
+                    prepareVarInStack(src->u.var_name, alist);
+                    clearReg(REG_ARG_0, alist);
+                    loadReg(REG_ARG_0, src->u.var_name, alist);
+                } else {
+                    clearReg(REG_ARG_0, alist);
+                    loadRegImm(REG_ARG_0, src->u.val, alist);
+                }
+                alist = appewdn(
+                    alist,
+                    newAsmCode(ASM_SYS)
+                );
+                
+                clearReg(REG_VALUE_0, alist);
+                loadRegImm(REG_VALUE_0, 11, alist);
+                clearReg(REG_ARG_0, alist);
+                loadRegImm(REG_ARG_0, '\n', alist);
+
+                alist = append(
+                    alist,
+                    newAsmCode(ASM_SYS)
+                );
+
                 break;
+            }
             default:
                 assert(0);
                 break;
@@ -437,7 +606,8 @@ static AsmList generateAsmList(ICList icode_list) {
                 line->next->code.kind == IC_LABEL ||
                 line->next->code.kind == IC_FUNCTION ||
                 line->next->code.kind == IC_GOTO ||
-                line->next->code.kind == IC_IFGOTO
+                line->next->code.kind == IC_IFGOTO ||
+                line->next->code.kind == IC_RETURN
             )
         )
             for (int i = 0; i < NR_REGS; i++)
@@ -471,8 +641,12 @@ static void printAsmOp(AsmOp op) {
 
 void printAsmList(AsmList alist) {
     if (file_out != NULL) {
+        fprintf(file_out, ".globl main\n.text\n");
         for (AsmList line = alist; line != NULL; line = line->next) {
             switch (line->asm_code.asm_kind) {
+                case ASM_SYS:
+                    fprintf(file_out, "    %s", instrs[line->asm_code.asm_kind]);
+                    break;
                 case ASM_LABEL:
                     fprintf(file_out, "%s:", line->asm_code.u.uniop.op->u.name);
                     break;

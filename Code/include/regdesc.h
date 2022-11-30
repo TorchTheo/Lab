@@ -49,7 +49,7 @@ typedef enum {
 struct RegDesc {
     uint8_t content_is_imm;
     struct {
-        LinkList lst;
+        strLinkList lst;
         int imm;
     } content;
 } regs[NR_REGS];
@@ -57,7 +57,7 @@ struct RegDesc {
 struct AddrDesc_ {
     char *var_name;
     uint32_t reg_vec;
-    LinkList addr_list;
+    intLinkList addr_list;
 };
 
 #endif

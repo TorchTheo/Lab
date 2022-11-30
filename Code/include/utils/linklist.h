@@ -3,16 +3,27 @@
 
 #include "../type.h"
 
-typedef struct LinkNode* LinkList;
+typedef struct intLinkNode* intLinkList;
+typedef struct strLinkNode* strLinkList;
 
-struct LinkNode {
+struct intLinkNode {
     int64_t value;
-    LinkList prev, next;
+    intLinkList prev, next;
 };
 
-LinkList newLinkList();
-uint8_t linklistInsert(LinkList, int64_t);
-uint8_t linklistDelete(LinkList, int64_t);
-uint8_t linklistClear(LinkList);
+intLinkList intNewLinkList();
+uint8_t intLinklistInsert(intLinkList, int64_t);
+uint8_t intLinklistDelete(intLinkList, int64_t);
+uint8_t intLinklistClear(intLinkList);
+
+struct strLinkNode {
+    char *value;
+    strLinkList prev, next;
+};
+
+strLinkList strNewLinkList();
+uint8_t strLinklistInsert(strLinkList, char*);
+uint8_t strLinklistDelete(strLinkList, char*);
+uint8_t strLinklistClear(strLinkList);
 
 #endif

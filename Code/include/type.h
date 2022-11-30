@@ -175,6 +175,7 @@ struct AsmCode_ {
         ASM_BLT,
         ASM_BGE,
         ASM_BLE,
+        ASM_SYS,
     } asm_kind;
     union {
         struct { AsmOp op; } uniop;
